@@ -1,0 +1,7 @@
+[project]
+name = "AlphaZero in Pan"
+version = "0.1.0"
+description = "Using AlphaZero algorithm to play the game of Pan"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
