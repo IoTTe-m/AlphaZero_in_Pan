@@ -4,8 +4,6 @@ import numpy as np
 Suits = {"H": 6, "D": 7, "C": 8, "S": 9}
 Values = ["9", "10", "J", "Q", "K", "A"]
 
-# TODO: fix the fact that you cannot put clubs at the bottom when playing four 9s
-
 class GameState:
     def __init__(self):
         self.no_players = 4
@@ -66,14 +64,14 @@ class GameState:
     def execute_action(self, player: int, action: int) -> bool:
         # action meanings:
         # 0-23 - play a single card
-        # 24-26 - play three 9s, where 24 means spade goes on top, 25 means spade goes second and so on
-        # 27-30 - play four 9s, where 27 means spade goes on top and so on
-        # 31-34 - play four 10s
-        # 35-38 - play four Js
-        # 39-42 - play four Qs
-        # 43-46 - play four Ks
-        # 47-50 - play four As
-        # 51 - take cards from table
+        # 24-26 - play three 9s, where 24 means spade goes on the bottom of the stack, 25 means spade goes second from bottom and so on
+        # 27-29 - play four 9s, where 27 means spade goes on the bottom of the stack and so on
+        # 30-33 - play four 10s
+        # 34-37 - play four Js
+        # 38-41 - play four Qs
+        # 42-45 - play four Ks
+        # 46-49 - play four As
+        # 50 - take cards from table
 
         if action < 24:
             rank = action % 6
@@ -92,11 +90,19 @@ class GameState:
                 self.table_state[self.cards_on_table][Suits[suit]] = 1
                 self.cards_on_table += 1
                 self.player_hands[suit][0] = -1
-        # elif action in range(27, 31):
-        elif action in range(27, 51):
-            # TODO
-            spade_index = (action - 27) % 4
-            rank = (action - 27) // 4
+        elif action in range(27, 30):
+            # when playing four 9s, where to put spade
+            spade_index = action - 27 + 1
+            card_order = ["H", "D", "C"]
+            card_order.insert(spade_index, "S")
+            for suit in card_order:
+                self.table_state[self.cards_on_table][0] = 1
+                self.table_state[self.cards_on_table][Suits[suit]] = 1
+                self.cards_on_table += 1
+                self.player_hands[suit][0] = -1
+        elif action in range(30, 50):
+            spade_index = (action - 30) % 4
+            rank = (action - 30) // 4
             card_order = ["H", "D", "C"]
             card_order.insert(spade_index, "S")
             for suit in card_order:
@@ -104,7 +110,7 @@ class GameState:
                 self.table_state[self.cards_on_table][Suits[suit]] = 1
                 self.cards_on_table += 1
                 self.player_hands[suit][rank] = -1
-        elif action == 51:
+        elif action == 50:
             for i in range(3):
                 if self.cards_on_table <= 1:
                     break
@@ -137,8 +143,7 @@ class GameState:
             actions.append(0)
             # four 9s
             if np.count_nonzero(values == 0) == 4:
-                # TODO
-                actions += range(27, 31)
+                actions += range(27, 30)
 
         if self.cards_on_table == 0:
             return actions
@@ -159,10 +164,10 @@ class GameState:
         # four cards play
         for i in range(rank + 1, 6):
             if np.count_nonzero(values == i) == 4:
-                actions += range(27 + 4 * i, 31 + 4 * i)
+                actions += range(26 + 4 * i, 30 + 4 * i)
 
         if self.cards_on_table > 1:
-            actions += [51]
+            actions += [50]
 
         return actions
 
@@ -184,7 +189,7 @@ for _ in range(10):
             rank, suit = GameState.decode_card(card_encoding)
             print(f"Top card: {Values[rank]}{suit_symbols[suit]}")
         else:
-            print(f"Top card: none")
+            print("Top card: none")
         print(
             f"0: {GameState.print_hand(table.get_player_hand(0)[0], table.get_player_hand(0)[1])} {table.get_possible_actions(0)}")
         print(
