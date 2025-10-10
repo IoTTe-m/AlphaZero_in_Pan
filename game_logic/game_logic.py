@@ -36,8 +36,8 @@ class GameState:
         # rank, suit
         try:
             rank, suit = np.where(np.array(card_encoding) == 1)[0]
-        except:
-            raise ValueError(f"Invalid card encoding: {card_encoding}")
+        except Exception as e:
+            raise ValueError(f"Invalid card encoding: {card_encoding}") from e
         suit -= 6
         return rank, suit
 

@@ -32,12 +32,12 @@ jobs:
           restore-keys: |
             uv-${{ runner.os }}-
 
-      - run: uv sync --dev
+      - run: uv sync --group dev
 
-    # Lint
+      # Lint
       - name: Ruff lint
         run: uv run ruff check .
 
-    # Format
+      # Format
       - name: Ruff format (check only)
         run: uv run ruff format --check .

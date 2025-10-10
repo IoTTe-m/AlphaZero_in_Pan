@@ -13,15 +13,16 @@ ml = [
     "torch>=2.8.0",
 ]
 
-[tool.uv]
-dev-dependencies = [
+# Development tooling managed by uv via dependency groups
+[dependency-groups]
+dev = [
     "ruff>=0.6.4",
 ]
 
-# configuration for linting and formatting
+# Ruff configuration for linting and formatting
 [tool.ruff]
-target-version = "py313"
-line-length = 100
+target-version = "py312"
+line-length = 150
 
 [tool.ruff.lint]
 select = [
