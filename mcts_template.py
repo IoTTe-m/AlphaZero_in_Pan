@@ -6,7 +6,7 @@ def ucb_score(parent, child):
     """
     The score for an action that would transition between the parent and child.
     """
-    #TODO: this is calculated incorrectly, fix the calculations
+    # TODO: this is calculated incorrectly, fix the calculations
     prior_score = child.prior * math.sqrt(parent.visit_count) / (child.visit_count + 1)
     if child.visit_count > 0:
         # The value of the child is from the perspective of the opposing player
@@ -42,7 +42,7 @@ class Node:
         actions = [action for action in self.children.keys()]
         if temperature == 0:
             action = actions[np.argmax(visit_counts)]
-        elif temperature == float("inf"):
+        elif temperature == float('inf'):
             action = np.random.choice(actions)
         else:
             # See paper appendix Data Generation
@@ -83,19 +83,17 @@ class Node:
         """
         Debugger pretty print node info
         """
-        prior = "{0:.2f}".format(self.prior)
-        return "{} Prior: {} Count: {} Value: {}".format(self.state.__str__(), prior, self.visit_count, self.value())
+        prior = '{0:.2f}'.format(self.prior)
+        return '{} Prior: {} Count: {} Value: {}'.format(self.state.__str__(), prior, self.visit_count, self.value())
 
 
 class MCTS:
-
     def __init__(self, game, model, args):
         self.game = game
         self.model = model
         self.args = args
 
     def run(self, model, state, to_play):
-
         root = Node(0, to_play)
         action_probs, value = model.predict(state)
         valid_moves = self.game.get_valid_moves(state)

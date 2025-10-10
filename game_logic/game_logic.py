@@ -5,16 +5,17 @@ from jax import numpy as jnp
 from flax import nnx
 
 # hearts, diamonds, clubs, spades
-SUITS = ["H", "D", "C", "S"]
+SUITS = ['H', 'D', 'C', 'S']
 suits_to_numbers = {suit: i for i, suit in enumerate(SUITS)}
-RANKS = ["9", "10", "J", "Q", "K", "A"]
+RANKS = ['9', '10', 'J', 'Q', 'K', 'A']
 ranks_to_numbers = {rank: i for i, rank in enumerate(RANKS)}
 
 ACTION_COUNT = 51
 
+
 class GameState:
     def __init__(self, no_players: int = 4):
-        assert no_players in [2, 3, 4], "Number of players should be equal to 2, 3 or 4"
+        assert no_players in [2, 3, 4], 'Number of players should be equal to 2, 3 or 4'
 
         self.cards_count = len(suits_to_numbers) * len(ranks_to_numbers)
         self.no_players = no_players
@@ -29,11 +30,11 @@ class GameState:
 
     @staticmethod
     def print_hand(ranks: np.ndarray, suits: np.ndarray) -> str:
-        suit_symbols = ["♥", "♦", "♣", "♠"]
+        suit_symbols = ['♥', '♦', '♣', '♠']
         hand: list[str] = []
         for i in range(len(suits)):
-            hand += [f"{suit_symbols[suits[i]]}{RANKS[ranks[i]]}"]
-        return " ".join(hand)
+            hand += [f'{suit_symbols[suits[i]]}{RANKS[ranks[i]]}']
+        return ' '.join(hand)
 
     @staticmethod
     def decode_card(card_encoding: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -42,7 +43,7 @@ class GameState:
         try:
             rank, suit = np.where(np.array(card_encoding) == 1)[0]
         except Exception as e:
-            raise ValueError(f"Invalid card encoding: {card_encoding}") from e
+            raise ValueError(f'Invalid card encoding: {card_encoding}') from e
         suit -= 6
         return rank, suit
 
@@ -111,8 +112,8 @@ class GameState:
         elif action in range(24, 27):
             # how many cards from top to reach spade
             spade_index = action - 24
-            card_order = ["D", "C"]
-            card_order.insert(spade_index, "S")
+            card_order = ['D', 'C']
+            card_order.insert(spade_index, 'S')
             rank = 0
             for suit in card_order:
                 self._play_card(rank, suits_to_numbers[suit])
@@ -120,8 +121,8 @@ class GameState:
         elif action in range(27, 30):
             # when playing four 9s, where to put spade
             spade_index = action - 27 + 1
-            card_order = ["H", "D", "C"]
-            card_order.insert(spade_index, "S")
+            card_order = ['H', 'D', 'C']
+            card_order.insert(spade_index, 'S')
             rank = 0
             for suit in card_order:
                 self._play_card(rank, suits_to_numbers[suit])
@@ -129,8 +130,8 @@ class GameState:
         elif action in range(30, 50):
             spade_index = (action - 30) % 4
             rank = (action - 30) // 4
-            card_order = ["H", "D", "C"]
-            card_order.insert(spade_index, "S")
+            card_order = ['H', 'D', 'C']
+            card_order.insert(spade_index, 'S')
             for suit in card_order:
                 self._play_card(rank, suits_to_numbers[suit])
 
@@ -146,14 +147,14 @@ class GameState:
                 self.knowledge_table[:, suit, rank] = player
 
         else:
-            raise ValueError("Invalid action")
+            raise ValueError('Invalid action')
 
         if len(self.get_player_hand(player)[0]) == 0:
             self.is_done_array[self.current_player] = 1
             if np.sum(self.is_done_array) == self.no_players - 1:
                 return True
 
-        player_shift = -1 if self.table_state[self.cards_on_table - 1][suits_to_numbers["S"]] == 1 else 1
+        player_shift = -1 if self.table_state[self.cards_on_table - 1][suits_to_numbers['S']] == 1 else 1
 
         self.current_player = (self.current_player + player_shift) % 4
         while self.is_done_array[self.current_player] == 1:
@@ -201,9 +202,7 @@ class GameState:
         return self.knowledge_table[self.current_player]
 
     def get_hands_card_counts(self) -> np.ndarray:
-        _, cards_counts = np.unique(
-            self.get_player_hand(self.current_player), return_counts=True, sorted=True
-        )
+        _, cards_counts = np.unique(self.get_player_hand(self.current_player), return_counts=True, sorted=True)
         return cards_counts
 
 
@@ -214,11 +213,11 @@ class StateProcessor:
 
     @staticmethod
     def get_mcts_state(state: GameState) -> GameState:
-        '''
+        """
         Gets current state and converts it into a starting state for Monte Carlo Tree Search
         :param state: GameState
         :return: new_state: GameState
-        '''
+        """
         current_knowledge = state.get_player_knowledge()
         mask_unknown = np.array(current_knowledge == -1)
         cards_per_player = state.get_hands_card_counts()
@@ -273,8 +272,7 @@ class PolicyStateProcessor:
     @staticmethod
     def encode(state: GameState) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         current_knowledge = state.get_player_knowledge()
-        prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player,
-                                                               state.no_players)
+        prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player, state.no_players)
         prepared_knowledge = StateProcessor.one_hot_encode_hands(prepared_knowledge, state.no_players)
         table_state = state.table_state
 
@@ -288,17 +286,19 @@ class ValueNetwork(nnx.Module):
     def __init__(self, no_players: int, suits_count: int, ranks_count: int):
         self.input_size = (no_players + suits_count + ranks_count) * suits_count * ranks_count
         self.output_size = no_players
-        self.model = nnx.Sequential([
-            nnx.Dense(input_size=self.input_size, output_size=512),
-            nnx.relu,
-            nnx.Dense(input_size=512, output_size=256),
-            nnx.relu,
-            nnx.Dense(input_size=256, output_size=128),
-            nnx.relu,
-            nnx.Dense(input_size=128, output_size=32),
-            nnx.relu,
-            nnx.Dense(input_size=32, output_size=self.output_size)
-        ])
+        self.model = nnx.Sequential(
+            [
+                nnx.Dense(input_size=self.input_size, output_size=512),
+                nnx.relu,
+                nnx.Dense(input_size=512, output_size=256),
+                nnx.relu,
+                nnx.Dense(input_size=256, output_size=128),
+                nnx.relu,
+                nnx.Dense(input_size=128, output_size=32),
+                nnx.relu,
+                nnx.Dense(input_size=32, output_size=self.output_size),
+            ]
+        )
 
     def __call__(self, prepared_player_hands: jnp.ndarray, table_state: jnp.ndarray) -> jnp.ndarray:
         flattened_hands = prepared_player_hands.flatten()
@@ -311,26 +311,27 @@ class PolicyNetwork(nnx.Module):
     def __init__(self, no_players: int, suits_count: int, ranks_count: int, actions_space_size: int):
         self.input_size = (no_players + suits_count + ranks_count) * suits_count * ranks_count
         self.output_size = actions_space_size
-        self.model = nnx.Sequential([
-            nnx.Dense(input_size=self.input_size, output_size=512),
-            nnx.relu,
-            nnx.Dense(input_size=512, output_size=256),
-            nnx.relu,
-            nnx.Dense(input_size=256, output_size=128),
-            nnx.relu,
-            nnx.Dense(input_size=128, output_size=32),
-            nnx.relu,
-            nnx.Dense(input_size=32, output_size=self.output_size)
-        ])
+        self.model = nnx.Sequential(
+            [
+                nnx.Dense(input_size=self.input_size, output_size=512),
+                nnx.relu,
+                nnx.Dense(input_size=512, output_size=256),
+                nnx.relu,
+                nnx.Dense(input_size=256, output_size=128),
+                nnx.relu,
+                nnx.Dense(input_size=128, output_size=32),
+                nnx.relu,
+                nnx.Dense(input_size=32, output_size=self.output_size),
+            ]
+        )
 
-    def __call__(self, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray,
-                 actions_mask: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray, actions_mask: jnp.ndarray) -> jnp.ndarray:
         # a 1 in action_mask means that we want to include this action
         flattened_knowledge = prepared_knowledge.flatten()
         flattened_table = table_state.flatten()
         concat_features = jnp.concatenate((flattened_knowledge, flattened_table))
         logits = self.model(concat_features)
-        return nnx.softmax(logits, where=actions_mask) # TODO: check if it's correct
+        return nnx.softmax(logits, where=actions_mask)  # TODO: check if it's correct
 
 
 class MTCS:
@@ -338,17 +339,16 @@ class MTCS:
         self.num_worlds = num_worlds
         self.num_simulations = num_simulations
 
-# ROLLOUT:
+    # ROLLOUT:
     # zwiększ ilość odwiedzeń node'a o 1
     # wylistuj akcje
     # jeżeli jesteś w liściu, to odpal policy network
     # zapisz odpowiedź sieci
     # wybierz losową akcję przy pomocy śmiesznego wzorku (odpowiedź sieci + jakieś rzeczy przeróżne)
     # rozszerz drzewo przeszukiwań
-# rób rollout aż do liścia
-# policz value (jeżeli przegrany/wygrany, to znamy wartość, w przeciwnym wypadku użyj value network)
-# propaguj value w górę drzewa i zwiększ nagrodę gracza, który gra aktualnie w danym stanie
-
+    # rób rollout aż do liścia
+    # policz value (jeżeli przegrany/wygrany, to znamy wartość, w przeciwnym wypadku użyj value network)
+    # propaguj value w górę drzewa i zwiększ nagrodę gracza, który gra aktualnie w danym stanie
 
     def run(self, game_state: GameState):
         for _ in range(self.num_simulations):
@@ -358,31 +358,26 @@ class MTCS:
     # def search(self, prepared_game_state: GameState):
 
 
-
 table = GameState()
 
 score = [0, 0, 0, 0]
-suit_symbols = ["♥", "♦", "♣", "♠"]
+suit_symbols = ['♥', '♦', '♣', '♠']
 
 for _ in range(10):
     table.restart()
     for _ in range(10000):
         print()
-        print(f"Current player: {table.current_player}")
+        print(f'Current player: {table.current_player}')
         if table.cards_on_table > 0:
             card_encoding = table.table_state[table.cards_on_table - 1]
             rank, suit = GameState.decode_card(card_encoding)
-            print(f"Top card: {RANKS[rank]}{suit_symbols[suit]}")
+            print(f'Top card: {RANKS[rank]}{suit_symbols[suit]}')
         else:
-            print("Top card: none")
-        print(
-            f"0: {GameState.print_hand(table.get_player_hand(0)[0], table.get_player_hand(0)[1])} {table.get_possible_actions(0)}")
-        print(
-            f"1: {GameState.print_hand(table.get_player_hand(1)[0], table.get_player_hand(1)[1])} {table.get_possible_actions(1)}")
-        print(
-            f"2: {GameState.print_hand(table.get_player_hand(2)[0], table.get_player_hand(2)[1])} {table.get_possible_actions(2)}")
-        print(
-            f"3: {GameState.print_hand(table.get_player_hand(3)[0], table.get_player_hand(3)[1])} {table.get_possible_actions(3)}")
+            print('Top card: none')
+        print(f'0: {GameState.print_hand(table.get_player_hand(0)[0], table.get_player_hand(0)[1])} {table.get_possible_actions(0)}')
+        print(f'1: {GameState.print_hand(table.get_player_hand(1)[0], table.get_player_hand(1)[1])} {table.get_possible_actions(1)}')
+        print(f'2: {GameState.print_hand(table.get_player_hand(2)[0], table.get_player_hand(2)[1])} {table.get_possible_actions(2)}')
+        print(f'3: {GameState.print_hand(table.get_player_hand(3)[0], table.get_player_hand(3)[1])} {table.get_possible_actions(3)}')
         if table.execute_action(table.current_player, table.get_possible_actions(table.current_player)[0]):
             score[table.current_player] += 1
             break
