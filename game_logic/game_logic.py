@@ -1,6 +1,8 @@
-from abc import ABC, abstractmethod
-import numpy as np
 from copy import deepcopy
+
+import numpy as np
+from jax import numpy as jnp
+from flax import nnx
 
 # hearts, diamonds, clubs, spades
 SUITS = ["H", "D", "C", "S"]
@@ -8,6 +10,7 @@ suits_to_numbers = {suit: i for i, suit in enumerate(SUITS)}
 RANKS = ["9", "10", "J", "Q", "K", "A"]
 ranks_to_numbers = {rank: i for i, rank in enumerate(RANKS)}
 
+ACTION_COUNT = 51
 
 class GameState:
     def __init__(self, no_players: int = 4):
@@ -204,7 +207,7 @@ class GameState:
         return cards_counts
 
 
-class StateProcessor(ABC):
+class StateProcessor:
     @staticmethod
     def change_perspective(knowledge_array: np.ndarray, player_number: int, no_players: int) -> np.ndarray:
         return np.where(knowledge_array == -1, -1, (knowledge_array - player_number) % no_players)
@@ -231,7 +234,7 @@ class StateProcessor(ABC):
         filled_hands = flat_knowledge.reshape(current_knowledge.shape)
 
         # Build new knowledge table
-        full_knowledge = -np.ones((state.no_players, len(Suits), len(Ranks)))
+        full_knowledge = -np.ones((state.no_players, len(SUITS), len(RANKS)))
         GameState.fill_knowledge_table(full_knowledge, filled_hands, state.no_players)
 
         # Create new state
@@ -242,29 +245,92 @@ class StateProcessor(ABC):
         return new_state
 
     @staticmethod
-    @abstractmethod
-    def encode(state: GameState) -> tuple[np.ndarray, np.ndarray]:
-        pass
+    def encode_actions(actions_list: list[int]) -> np.ndarray:
+        encoded_actions = np.zeros((ACTION_COUNT,))
+        encoded_actions[actions_list] = 1
+        return encoded_actions
 
-
-class ValueStateProcessor(StateProcessor):
     @staticmethod
-    def encode(state: GameState) -> tuple[np.ndarray, np.ndarray]:
+    def one_hot_encode_hands(player_hands: np.ndarray, no_players: int) -> np.ndarray:
+        encoded_hands = np.zeros(player_hands.shape + (no_players + 1,))
+        encoded_hands[..., -1] = player_hands == -1
+        for player in range(no_players):
+            encoded_hands[..., player] = player_hands == player
+        return encoded_hands
+
+
+class ValueStateProcessor:
+    @staticmethod
+    def encode(state: GameState) -> tuple[jnp.ndarray, jnp.ndarray]:
         player_hands = state.player_hands
         prepared_player_hands = StateProcessor.change_perspective(player_hands, state.current_player, state.no_players)
+        prepared_player_hands = StateProcessor.one_hot_encode_hands(prepared_player_hands, state.no_players)
         table_state = state.table_state
-        return prepared_player_hands, table_state
+        return jnp.array(prepared_player_hands), jnp.array(table_state)
 
 
-class PolicyStateProcessor(StateProcessor):
+class PolicyStateProcessor:
     @staticmethod
-    def encode(state: GameState) -> tuple[np.ndarray, np.ndarray]:
+    def encode(state: GameState) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         current_knowledge = state.get_player_knowledge()
         prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player,
                                                                state.no_players)
+        prepared_knowledge = StateProcessor.one_hot_encode_hands(prepared_knowledge, state.no_players)
         table_state = state.table_state
-        return prepared_knowledge, table_state
 
+        possible_actions = state.get_possible_actions(state.current_player)
+        encoded_actions = StateProcessor.encode_actions(possible_actions)
+
+        return jnp.array(prepared_knowledge), jnp.array(table_state), jnp.array(encoded_actions)
+
+
+class ValueNetwork(nnx.Module):
+    def __init__(self, no_players: int, suits_count: int, ranks_count: int):
+        self.input_size = (no_players + suits_count + ranks_count) * suits_count * ranks_count
+        self.output_size = 1
+        self.model = nnx.Sequential([
+            nnx.Dense(input_size=self.input_size, output_size=512),
+            nnx.relu,
+            nnx.Dense(input_size=512, output_size=256),
+            nnx.relu,
+            nnx.Dense(input_size=256, output_size=128),
+            nnx.relu,
+            nnx.Dense(input_size=128, output_size=32),
+            nnx.relu,
+            nnx.Dense(input_size=32, output_size=1)
+        ])
+
+    def __call__(self, prepared_player_hands: jnp.ndarray, table_state: jnp.ndarray) -> jnp.ndarray:
+        flattened_hands = prepared_player_hands.flatten()
+        flattened_table = table_state.flatten()
+        concat_features = jnp.concatenate((flattened_hands, flattened_table))
+        return self.model(concat_features)
+
+
+class PolicyNetwork(nnx.Module):
+    def __init__(self, no_players: int, suits_count: int, ranks_count: int, actions_space_size: int):
+        self.input_size = (no_players + suits_count + ranks_count) * suits_count * ranks_count
+        self.output_size = actions_space_size
+        self.model = nnx.Sequential([
+            nnx.Dense(input_size=self.input_size, output_size=512),
+            nnx.relu,
+            nnx.Dense(input_size=512, output_size=256),
+            nnx.relu,
+            nnx.Dense(input_size=256, output_size=128),
+            nnx.relu,
+            nnx.Dense(input_size=128, output_size=32),
+            nnx.relu,
+            nnx.Dense(input_size=32, output_size=self.output_size)
+        ])
+
+    def __call__(self, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray,
+                 actions_mask: jnp.ndarray) -> jnp.ndarray:
+        # a 1 in action_mask means that we want to include this action
+        flattened_knowledge = prepared_knowledge.flatten()
+        flattened_table = table_state.flatten()
+        concat_features = jnp.concatenate((flattened_knowledge, flattened_table))
+        logits = self.model(concat_features)
+        return nnx.softmax(logits, where=actions_mask)
 
 table = GameState()
 
