@@ -1,24 +1,26 @@
+from abc import ABC, abstractmethod
 import numpy as np
+from copy import deepcopy
 
 # hearts, diamonds, clubs, spades
 Suits = ["H", "D", "C", "S"]
-Suits_inverse = {suit: i for i, suit in enumerate(Suits)}
+Suit_to_number_map = {suit: i for i, suit in enumerate(Suits)}
 Ranks = ["9", "10", "J", "Q", "K", "A"]
-Ranks_inverse = {rank: i for i, rank in enumerate(Ranks)}
+Rank_to_number_map = {rank: i for i, rank in enumerate(Ranks)}
 
 
 class GameState:
     def __init__(self, no_players: int = 4):
         assert no_players in [2, 3, 4], "Number of players should be equal to 2, 3 or 4"
 
-        self.cards_count = len(Suits_inverse) * len(Ranks_inverse)
+        self.cards_count = len(Suit_to_number_map) * len(Rank_to_number_map)
         self.no_players = no_players
-        self.player_hands = -np.ones((len(Suits_inverse), len(Ranks_inverse)))
+        self.player_hands = -np.ones((len(Suit_to_number_map), len(Rank_to_number_map)))
         self.table_state = np.zeros((self.cards_count, 10))
         self.current_player = -1
         self.cards_on_table = 0
         self.is_done_array = np.zeros(self.no_players)
-        self.knowledge_table = -np.ones((self.no_players, len(Suits_inverse), len(Ranks_inverse)))
+        self.knowledge_table = -np.ones((self.no_players, len(Suit_to_number_map), len(Rank_to_number_map)))
 
         self.restart()
 
@@ -41,10 +43,11 @@ class GameState:
         suit -= 6
         return rank, suit
 
-    def _fill_knowledge_table(self):
-        for player in range(self.no_players):
-            is_this_player = self.player_hands == player
-            self.knowledge_table[player] = np.where(is_this_player, self.player_hands, self.knowledge_table[player])
+    @staticmethod
+    def fill_knowledge_table(knowledge_table: np.ndarray, player_hands: np.ndarray, no_players: int):
+        for player in range(no_players):
+            is_this_player = player_hands == player
+            knowledge_table[player] = np.where(is_this_player, player_hands, knowledge_table[player])
 
     def prepare_deal(self) -> np.ndarray:
         # the deal is a 2d matrix
@@ -53,7 +56,7 @@ class GameState:
         cards_per_player = self.cards_count // self.no_players
         cards = np.repeat(np.arange(0, self.no_players), cards_per_player)
         np.random.shuffle(cards)
-        cards = np.reshape(cards, (len(Suits_inverse), -1))
+        cards = np.reshape(cards, (len(Suit_to_number_map), -1))
         return cards
 
     def restart(self):
@@ -62,8 +65,9 @@ class GameState:
         self.current_player = self.get_starting_player()
         self.cards_on_table = 0
         self.is_done_array = np.zeros(self.no_players)
-        self.knowledge_table = -np.ones((self.no_players, len(Suits_inverse), len(Ranks_inverse)))
-        self._fill_knowledge_table()
+        # -2: card is on the table, -1: we don't know where the card is
+        self.knowledge_table = -np.ones((self.no_players, len(Suit_to_number_map), len(Rank_to_number_map)))
+        GameState.fill_knowledge_table(self.knowledge_table, self.player_hands, self.no_players)
 
     def print_table(self):
         for player in range(self.no_players):
@@ -82,7 +86,7 @@ class GameState:
         self.table_state[self.cards_on_table][6 + suit] = 1
         self.cards_on_table += 1
         self.player_hands[suit][rank] = -1
-        self.knowledge_table[:, suit, rank] = -1
+        self.knowledge_table[:, suit, rank] = -2
 
     def execute_action(self, player: int, action: int) -> bool:
         # action meanings:
@@ -108,7 +112,7 @@ class GameState:
             card_order.insert(spade_index, "S")
             rank = 0
             for suit in card_order:
-                self._play_card(rank, Suits_inverse[suit])
+                self._play_card(rank, Suit_to_number_map[suit])
 
         elif action in range(27, 30):
             # when playing four 9s, where to put spade
@@ -117,7 +121,7 @@ class GameState:
             card_order.insert(spade_index, "S")
             rank = 0
             for suit in card_order:
-                self._play_card(rank, Suits_inverse[suit])
+                self._play_card(rank, Suit_to_number_map[suit])
 
         elif action in range(30, 50):
             spade_index = (action - 30) % 4
@@ -125,7 +129,7 @@ class GameState:
             card_order = ["H", "D", "C"]
             card_order.insert(spade_index, "S")
             for suit in card_order:
-                self._play_card(rank, Suits_inverse[suit])
+                self._play_card(rank, Suit_to_number_map[suit])
 
         elif action == 50:
             for i in range(3):
@@ -146,7 +150,7 @@ class GameState:
             if np.sum(self.is_done_array) == self.no_players - 1:
                 return True
 
-        player_shift = -1 if self.table_state[self.cards_on_table - 1][Suits_inverse["S"]] == 1 else 1
+        player_shift = -1 if self.table_state[self.cards_on_table - 1][Suit_to_number_map["S"]] == 1 else 1
 
         self.current_player = (self.current_player + player_shift) % 4
         while self.is_done_array[self.current_player] == 1:
@@ -189,6 +193,77 @@ class GameState:
             actions += [50]
 
         return actions
+
+    def get_player_knowledge(self) -> np.ndarray:
+        return self.knowledge_table[self.current_player]
+
+    def get_hands_card_counts(self) -> np.ndarray:
+        _, cards_counts = np.unique(
+            self.get_player_hand(self.current_player), return_counts=True, sorted=True
+        )
+        return cards_counts
+
+
+class StateProcessor(ABC):
+    @staticmethod
+    def change_perspective(knowledge_array: np.ndarray, player_number: int, no_players: int) -> np.ndarray:
+        return np.where(knowledge_array == -1, -1, (knowledge_array - player_number) % no_players)
+
+    @staticmethod
+    def get_mcts_state(state: GameState) -> GameState:
+        '''
+        Gets current state and converts it into a starting state for Monte Carlo Tree Search
+        :param state: GameState
+        :return: new_state: GameState
+        '''
+        current_knowledge = state.get_player_knowledge()
+        mask_unknown = np.array(current_knowledge == -1)
+        cards_per_player = state.get_hands_card_counts()
+
+        # Randomly shuffle unknown cards
+        players_to_fill = np.repeat(np.arange(len(cards_per_player)), cards_per_player)
+        np.random.shuffle(players_to_fill)
+
+        # Deal the unknown cards to players
+        flat_knowledge = current_knowledge.flatten()
+        mask_unknown = mask_unknown.flatten()
+        flat_knowledge[mask_unknown] = players_to_fill
+        filled_hands = flat_knowledge.reshape(current_knowledge.shape)
+
+        # Build new knowledge table
+        full_knowledge = -np.ones((state.no_players, len(Suits), len(Ranks)))
+        GameState.fill_knowledge_table(full_knowledge, filled_hands, state.no_players)
+
+        # Create new state
+        new_state = deepcopy(state)
+        new_state.player_hands = filled_hands
+        new_state.knowledge_table = full_knowledge
+
+        return new_state
+
+    @staticmethod
+    @abstractmethod
+    def encode(state: GameState) -> tuple[np.ndarray, np.ndarray]:
+        pass
+
+
+class ValueStateProcessor(StateProcessor):
+    @staticmethod
+    def encode(state: GameState) -> tuple[np.ndarray, np.ndarray]:
+        player_hands = state.player_hands
+        prepared_player_hands = StateProcessor.change_perspective(player_hands, state.current_player, state.no_players)
+        table_state = state.table_state
+        return prepared_player_hands, table_state
+
+
+class PolicyStateProcessor(StateProcessor):
+    @staticmethod
+    def encode(state: GameState) -> tuple[np.ndarray, np.ndarray]:
+        current_knowledge = state.get_player_knowledge()
+        prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player,
+                                                               state.no_players)
+        table_state = state.table_state
+        return prepared_knowledge, table_state
 
 
 table = GameState()
