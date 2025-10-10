@@ -12,3 +12,30 @@ dependencies = [
 ml = [
     "torch>=2.8.0",
 ]
+
+# Development tooling managed by uv via dependency groups
+[dependency-groups]
+dev = [
+    "ruff>=0.6.4",
+]
+
+# Ruff configuration for linting and formatting
+[tool.ruff]
+target-version = "py312"
+line-length = 150
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # import sorting
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+line-ending = "lf"
