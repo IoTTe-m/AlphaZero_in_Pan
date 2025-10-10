@@ -287,7 +287,7 @@ class PolicyStateProcessor:
 class ValueNetwork(nnx.Module):
     def __init__(self, no_players: int, suits_count: int, ranks_count: int):
         self.input_size = (no_players + suits_count + ranks_count) * suits_count * ranks_count
-        self.output_size = 1
+        self.output_size = no_players
         self.model = nnx.Sequential([
             nnx.Dense(input_size=self.input_size, output_size=512),
             nnx.relu,
@@ -297,7 +297,7 @@ class ValueNetwork(nnx.Module):
             nnx.relu,
             nnx.Dense(input_size=128, output_size=32),
             nnx.relu,
-            nnx.Dense(input_size=32, output_size=1)
+            nnx.Dense(input_size=32, output_size=self.output_size)
         ])
 
     def __call__(self, prepared_player_hands: jnp.ndarray, table_state: jnp.ndarray) -> jnp.ndarray:
@@ -330,7 +330,34 @@ class PolicyNetwork(nnx.Module):
         flattened_table = table_state.flatten()
         concat_features = jnp.concatenate((flattened_knowledge, flattened_table))
         logits = self.model(concat_features)
-        return nnx.softmax(logits, where=actions_mask)
+        return nnx.softmax(logits, where=actions_mask) # TODO: check if it's correct
+
+
+class MTCS:
+    def __init__(self, num_worlds: int, num_simulations: int):
+        self.num_worlds = num_worlds
+        self.num_simulations = num_simulations
+
+# ROLLOUT:
+    # zwiększ ilość odwiedzeń node'a o 1
+    # wylistuj akcje
+    # jeżeli jesteś w liściu, to odpal policy network
+    # zapisz odpowiedź sieci
+    # wybierz losową akcję przy pomocy śmiesznego wzorku (odpowiedź sieci + jakieś rzeczy przeróżne)
+    # rozszerz drzewo przeszukiwań
+# rób rollout aż do liścia
+# policz value (jeżeli przegrany/wygrany, to znamy wartość, w przeciwnym wypadku użyj value network)
+# propaguj value w górę drzewa i zwiększ nagrodę gracza, który gra aktualnie w danym stanie
+
+
+    def run(self, game_state: GameState):
+        for _ in range(self.num_simulations):
+            prepared_game_state = StateProcessor.get_mcts_state(game_state)
+            # TODO: search
+
+    # def search(self, prepared_game_state: GameState):
+
+
 
 table = GameState()
 
