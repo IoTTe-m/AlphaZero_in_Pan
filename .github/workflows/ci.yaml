@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        shell: bash
+      - run: echo "${HOME}/.local/bin" >> $GITHUB_PATH
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('**/pyproject.toml', '**/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      - run: uv sync --dev
+
+    # Lint
+      - name: Ruff lint
+        run: uv run ruff check .
+
+    # Format
+      - name: Ruff format (check only)
+        run: uv run ruff format --check .

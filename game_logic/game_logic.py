@@ -1,33 +1,33 @@
 import numpy as np
 
 # hearts, diamonds, clubs, spades
-Suits = ["H", "D", "C", "S"]
-Suits_inverse = {suit: i for i, suit in enumerate(Suits)}
-Ranks = ["9", "10", "J", "Q", "K", "A"]
-Ranks_inverse = {rank: i for i, rank in enumerate(Ranks)}
+SUITS = ["H", "D", "C", "S"]
+suits_to_numbers = {suit: i for i, suit in enumerate(SUITS)}
+RANKS = ["9", "10", "J", "Q", "K", "A"]
+ranks_to_numbers = {rank: i for i, rank in enumerate(RANKS)}
 
 
 class GameState:
     def __init__(self, no_players: int = 4):
         assert no_players in [2, 3, 4], "Number of players should be equal to 2, 3 or 4"
 
-        self.cards_count = len(Suits_inverse) * len(Ranks_inverse)
+        self.cards_count = len(suits_to_numbers) * len(ranks_to_numbers)
         self.no_players = no_players
-        self.player_hands = -np.ones((len(Suits_inverse), len(Ranks_inverse)))
+        self.player_hands = -np.ones((len(suits_to_numbers), len(ranks_to_numbers)))
         self.table_state = np.zeros((self.cards_count, 10))
         self.current_player = -1
         self.cards_on_table = 0
         self.is_done_array = np.zeros(self.no_players)
-        self.knowledge_table = -np.ones((self.no_players, len(Suits_inverse), len(Ranks_inverse)))
+        self.knowledge_table = -np.ones((self.no_players, len(suits_to_numbers), len(ranks_to_numbers)))
 
         self.restart()
 
     @staticmethod
-    def print_hand(ranks, suits):
+    def print_hand(ranks: np.ndarray, suits: np.ndarray) -> str:
         suit_symbols = ["♥", "♦", "♣", "♠"]
-        hand = []
+        hand: list[str] = []
         for i in range(len(suits)):
-            hand += [f"{suit_symbols[suits[i]]}{Ranks[ranks[i]]}"]
+            hand += [f"{suit_symbols[suits[i]]}{RANKS[ranks[i]]}"]
         return " ".join(hand)
 
     @staticmethod
@@ -53,7 +53,7 @@ class GameState:
         cards_per_player = self.cards_count // self.no_players
         cards = np.repeat(np.arange(0, self.no_players), cards_per_player)
         np.random.shuffle(cards)
-        cards = np.reshape(cards, (len(Suits_inverse), -1))
+        cards = np.reshape(cards, (len(suits_to_numbers), -1))
         return cards
 
     def restart(self):
@@ -62,7 +62,7 @@ class GameState:
         self.current_player = self.get_starting_player()
         self.cards_on_table = 0
         self.is_done_array = np.zeros(self.no_players)
-        self.knowledge_table = -np.ones((self.no_players, len(Suits_inverse), len(Ranks_inverse)))
+        self.knowledge_table = -np.ones((self.no_players, len(suits_to_numbers), len(ranks_to_numbers)))
         self._fill_knowledge_table()
 
     def print_table(self):
@@ -108,7 +108,7 @@ class GameState:
             card_order.insert(spade_index, "S")
             rank = 0
             for suit in card_order:
-                self._play_card(rank, Suits_inverse[suit])
+                self._play_card(rank, suits_to_numbers[suit])
 
         elif action in range(27, 30):
             # when playing four 9s, where to put spade
@@ -117,7 +117,7 @@ class GameState:
             card_order.insert(spade_index, "S")
             rank = 0
             for suit in card_order:
-                self._play_card(rank, Suits_inverse[suit])
+                self._play_card(rank, suits_to_numbers[suit])
 
         elif action in range(30, 50):
             spade_index = (action - 30) % 4
@@ -125,10 +125,10 @@ class GameState:
             card_order = ["H", "D", "C"]
             card_order.insert(spade_index, "S")
             for suit in card_order:
-                self._play_card(rank, Suits_inverse[suit])
+                self._play_card(rank, suits_to_numbers[suit])
 
         elif action == 50:
-            for i in range(3):
+            for _ in range(3):
                 if self.cards_on_table <= 1:
                     break
                 self.cards_on_table -= 1
@@ -146,15 +146,15 @@ class GameState:
             if np.sum(self.is_done_array) == self.no_players - 1:
                 return True
 
-        player_shift = -1 if self.table_state[self.cards_on_table - 1][Suits_inverse["S"]] == 1 else 1
+        player_shift = -1 if self.table_state[self.cards_on_table - 1][suits_to_numbers["S"]] == 1 else 1
 
         self.current_player = (self.current_player + player_shift) % 4
         while self.is_done_array[self.current_player] == 1:
             self.current_player = (self.current_player + player_shift) % 4
         return False
 
-    def get_possible_actions(self, player: int):
-        actions = []
+    def get_possible_actions(self, player: int) -> list[int]:
+        actions: list[int] = []
         ranks, suits = self.get_player_hand(player)
 
         # 9 hearts
@@ -204,7 +204,7 @@ for _ in range(10):
         if table.cards_on_table > 0:
             card_encoding = table.table_state[table.cards_on_table - 1]
             rank, suit = GameState.decode_card(card_encoding)
-            print(f"Top card: {Ranks[rank]}{suit_symbols[suit]}")
+            print(f"Top card: {RANKS[rank]}{suit_symbols[suit]}")
         else:
             print("Top card: none")
         print(
