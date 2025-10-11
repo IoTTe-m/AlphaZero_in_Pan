@@ -1,8 +1,11 @@
 from copy import deepcopy
+from dataclasses import dataclass
+from functools import partial
 
 import numpy as np
 from jax import numpy as jnp
-from flax import nnx
+from jax import jit, value_and_grad, vmap
+from flax import linen as nn
 
 # hearts, diamonds, clubs, spades
 SUITS = ['H', 'D', 'C', 'S']
@@ -93,6 +96,9 @@ class GameState:
         self.knowledge_table[:, suit, rank] = -2
 
     def execute_action(self, player: int, action: int) -> bool:
+        # returns True if action results in player victory
+        # else returns False
+
         # action meanings:
         # 0-23 - play a single card
         # 24-26 - play three 9s, where 24 means spade goes on the bottom of the stack, 25 means spade goes second from bottom and so on
@@ -164,6 +170,9 @@ class GameState:
     def get_possible_actions(self, player: int) -> list[int]:
         actions: list[int] = []
         ranks, suits = self.get_player_hand(player)
+
+        if len(ranks) == 0:
+            return actions
 
         # 9 hearts
         if self.cards_on_table == 0 and ranks[0] == 0 and suits[0] == 0:
@@ -245,6 +254,7 @@ class StateProcessor:
 
     @staticmethod
     def encode_actions(actions_list: list[int]) -> np.ndarray:
+        # actions array ([0, 3, 23]) -> encoded array ([1,0,0,1,0...]
         encoded_actions = np.zeros((ACTION_COUNT,))
         encoded_actions[actions_list] = 1
         return encoded_actions
@@ -261,42 +271,55 @@ class StateProcessor:
 class ValueStateProcessor:
     @staticmethod
     def encode(state: GameState) -> tuple[jnp.ndarray, jnp.ndarray]:
+        # changes player_hands array so that the current player is encoded as 0
+        # and one-hot encodes player hands
         player_hands = state.player_hands
         prepared_player_hands = StateProcessor.change_perspective(player_hands, state.current_player, state.no_players)
         prepared_player_hands = StateProcessor.one_hot_encode_hands(prepared_player_hands, state.no_players)
         table_state = state.table_state
         return jnp.array(prepared_player_hands), jnp.array(table_state)
 
+    @staticmethod
+    def decode(state_values: jnp.ndarray, current_player: int) -> np.ndarray:
+        # for player 3: from [3, 0, 1, 2] to [0, 1, 2, 3]
+        split_index = len(state_values) - current_player
+        return np.array(jnp.concatenate(([state_values[split_index:], state_values[:split_index]])))
+
 
 class PolicyStateProcessor:
     @staticmethod
-    def encode(state: GameState) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def encode(state: GameState) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, list[int]]:
         current_knowledge = state.get_player_knowledge()
-        prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player, state.no_players)
+        prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player,
+                                                               state.no_players)
         prepared_knowledge = StateProcessor.one_hot_encode_hands(prepared_knowledge, state.no_players)
         table_state = state.table_state
 
         possible_actions = state.get_possible_actions(state.current_player)
         encoded_actions = StateProcessor.encode_actions(possible_actions)
 
-        return jnp.array(prepared_knowledge), jnp.array(table_state), jnp.array(encoded_actions)
+        return jnp.array(prepared_knowledge), jnp.array(table_state), jnp.array(encoded_actions), possible_actions
 
 
-class ValueNetwork(nnx.Module):
-    def __init__(self, no_players: int, suits_count: int, ranks_count: int):
-        self.input_size = (no_players + suits_count + ranks_count) * suits_count * ranks_count
-        self.output_size = no_players
-        self.model = nnx.Sequential(
+class ValueNetwork(nn.Module):
+    no_players: int
+    suits_count: int
+    ranks_count: int
+
+    def setup(self):
+        # input_size = (self.no_players + self.suits_count + self.ranks_count) * self.suits_count * self.ranks_count
+        output_size = self.no_players
+        self.model = nn.Sequential(
             [
-                nnx.Dense(input_size=self.input_size, output_size=512),
-                nnx.relu,
-                nnx.Dense(input_size=512, output_size=256),
-                nnx.relu,
-                nnx.Dense(input_size=256, output_size=128),
-                nnx.relu,
-                nnx.Dense(input_size=128, output_size=32),
-                nnx.relu,
-                nnx.Dense(input_size=32, output_size=self.output_size),
+                nn.Dense(features=512),
+                nn.relu,
+                nn.Dense(features=256),
+                nn.relu,
+                nn.Dense(features=128),
+                nn.relu,
+                nn.Dense(features=32),
+                nn.relu,
+                nn.Dense(features=output_size),
             ]
         )
 
@@ -307,37 +330,105 @@ class ValueNetwork(nnx.Module):
         return self.model(concat_features)
 
 
-class PolicyNetwork(nnx.Module):
-    def __init__(self, no_players: int, suits_count: int, ranks_count: int, actions_space_size: int):
-        self.input_size = (no_players + suits_count + ranks_count) * suits_count * ranks_count
-        self.output_size = actions_space_size
-        self.model = nnx.Sequential(
+class PolicyNetwork(nn.Module):
+    actions_space_size: int
+
+    def setup(self):
+        # input_size = (self.no_players + self.suits_count + self.ranks_count) * self.suits_count * self.ranks_count
+        output_size = self.actions_space_size
+        self.model = nn.Sequential(
             [
-                nnx.Dense(input_size=self.input_size, output_size=512),
-                nnx.relu,
-                nnx.Dense(input_size=512, output_size=256),
-                nnx.relu,
-                nnx.Dense(input_size=256, output_size=128),
-                nnx.relu,
-                nnx.Dense(input_size=128, output_size=32),
-                nnx.relu,
-                nnx.Dense(input_size=32, output_size=self.output_size),
+                nn.Dense(features=512),
+                nn.relu,
+                nn.Dense(features=256),
+                nn.relu,
+                nn.Dense(features=128),
+                nn.relu,
+                nn.Dense(features=32),
+                nn.relu,
+                nn.Dense(features=output_size),
             ]
         )
 
-    def __call__(self, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray, actions_mask: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray,
+                 actions_mask: jnp.ndarray) -> jnp.ndarray:
         # a 1 in action_mask means that we want to include this action
         flattened_knowledge = prepared_knowledge.flatten()
         flattened_table = table_state.flatten()
         concat_features = jnp.concatenate((flattened_knowledge, flattened_table))
         logits = self.model(concat_features)
-        return nnx.softmax(logits, where=actions_mask)  # TODO: check if it's correct
+        return nn.softmax(logits, where=actions_mask)
 
 
-class MTCS:
-    def __init__(self, num_worlds: int, num_simulations: int):
+@partial(jit, static_names=('value_network',))
+def call_value_network(value_network: ValueNetwork, value_network_params: dict,
+                       prepared_player_hands: jnp.ndarray, table_state: jnp.ndarray) -> jnp.ndarray:
+    return value_network.apply(
+        value_network_params, prepared_player_hands, table_state
+    )
+
+
+@partial(jit, static_names=('policy_network',))
+def call_policy_network(policy_network: PolicyNetwork, policy_network_params: dict,
+                        prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray,
+                        actions_mask: jnp.ndarray) -> jnp.ndarray:
+    return policy_network.apply(
+        policy_network_params, prepared_knowledge, table_state, actions_mask
+    )
+
+
+@dataclass
+class AlphaZeroNNs:
+    value_network: ValueNetwork
+    policy_network: PolicyNetwork
+    value_network_params: dict
+    policy_network_params: dict
+
+
+class Node:
+    def __init__(self, prior: float, state: GameState):
+        self.visit_count = 0
+        self.prior = prior
+        self.value_sum = 0
+        self.children = {}
+        self.state: GameState = state
+        self.uct_scores = -np.ones((ACTION_COUNT,)) * np.inf
+
+    def expanded(self):
+        return len(self.children) > 0
+
+    def is_terminal(self):
+        return sum(self.state.is_done_array) == self.state.no_players - 1
+
+    def expand(self, az_networks: AlphaZeroNNs, c_puct_value: float):
+        current_player = self.state.current_player
+        *policy_args, actions_list = PolicyStateProcessor.encode(self.state)
+        action_probs = call_policy_network(az_networks.policy_network, az_networks.policy_network_params, *policy_args)
+        for legal_action in actions_list:
+            new_state = deepcopy(self.state)
+            is_win_state = new_state.execute_action(current_player, legal_action)
+            # TODO: verify
+            child = Node(prior=float(action_probs[legal_action]), state=new_state)
+            self.children[legal_action] = child
+            self.uct_scores[legal_action] = MCTS.puct_score(self, child, c_puct_value)
+
+    def select_child(self) -> tuple['Node', int]:
+        action_index = np.argmax(self.uct_scores)
+        return self.children[action_index], self.visit_count
+
+
+class MCTS:
+    def __init__(self, networks: AlphaZeroNNs, num_worlds: int, num_simulations: int, c_puct_value: int = 1):
+        self.networks = networks
         self.num_worlds = num_worlds
         self.num_simulations = num_simulations
+        self.c_puct_value = c_puct_value
+
+    @staticmethod
+    def puct_score(parent: Node, child: Node, c_puct_value: float) -> float:
+        u_value = c_puct_value * child.prior * np.sqrt(parent.visit_count) / (child.visit_count + 1)
+        q_value = child.value_sum / child.visit_count if child.visit_count > 0 else 0
+        return u_value + q_value
 
     # ROLLOUT:
     # zwiększ ilość odwiedzeń node'a o 1
@@ -351,9 +442,46 @@ class MTCS:
     # propaguj value w górę drzewa i zwiększ nagrodę gracza, który gra aktualnie w danym stanie
 
     def run(self, game_state: GameState):
-        for _ in range(self.num_simulations):
+        root_values = np.zeros(game_state.no_players)
+        root_actions = np.zeros(ACTION_COUNT)
+
+        for _ in range(self.num_worlds):
             prepared_game_state = StateProcessor.get_mcts_state(game_state)
-            # TODO: search
+            root = Node(1.0, prepared_game_state)
+            for _ in range(self.num_simulations):
+                rollout_path, leaf = self.explore(root)
+
+                if not leaf.is_terminal():
+                    leaf.expand(self.networks, self.c_puct_value)
+                    value_args = ValueStateProcessor.encode(leaf.state)
+                    shifted_values = call_value_network(self.networks.value_network, self.networks.value_network_params,
+                                                *value_args)
+                    values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
+                    _, leaf_action = leaf.select_child()
+                    rollout_path.append((leaf, leaf_action))
+                else:
+                    values = np.ones(leaf.state.no_players) * (1 / (leaf.state.no_players - 1))
+                    values[leaf.state.current_player] = -1
+
+                self.backpropagate(rollout_path, values)
+
+    def explore(self, root: Node) -> tuple[list[tuple[Node, int]], Node]:
+        node = root
+        path = []
+        while node.expanded():
+            new_node, action = node.select_child()
+            path.append((node, action))
+            node = new_node
+        return path, node
+
+    def backpropagate(self, path: list[tuple[Node, int]], values: np.ndarray):
+        for node, action in reversed(path):
+            child = node.children[action]
+            child.visit_count += 1
+            child.value_sum += values[node.state.current_player]
+
+
+        #idk add 1 to root visit count too
 
     # def search(self, prepared_game_state: GameState):
 
@@ -374,10 +502,14 @@ for _ in range(10):
             print(f'Top card: {RANKS[rank]}{suit_symbols[suit]}')
         else:
             print('Top card: none')
-        print(f'0: {GameState.print_hand(table.get_player_hand(0)[0], table.get_player_hand(0)[1])} {table.get_possible_actions(0)}')
-        print(f'1: {GameState.print_hand(table.get_player_hand(1)[0], table.get_player_hand(1)[1])} {table.get_possible_actions(1)}')
-        print(f'2: {GameState.print_hand(table.get_player_hand(2)[0], table.get_player_hand(2)[1])} {table.get_possible_actions(2)}')
-        print(f'3: {GameState.print_hand(table.get_player_hand(3)[0], table.get_player_hand(3)[1])} {table.get_possible_actions(3)}')
+        print(
+            f'0: {GameState.print_hand(table.get_player_hand(0)[0], table.get_player_hand(0)[1])} {table.get_possible_actions(0)}')
+        print(
+            f'1: {GameState.print_hand(table.get_player_hand(1)[0], table.get_player_hand(1)[1])} {table.get_possible_actions(1)}')
+        print(
+            f'2: {GameState.print_hand(table.get_player_hand(2)[0], table.get_player_hand(2)[1])} {table.get_possible_actions(2)}')
+        print(
+            f'3: {GameState.print_hand(table.get_player_hand(3)[0], table.get_player_hand(3)[1])} {table.get_possible_actions(3)}')
         if table.execute_action(table.current_player, table.get_possible_actions(table.current_player)[0]):
             score[table.current_player] += 1
             break
