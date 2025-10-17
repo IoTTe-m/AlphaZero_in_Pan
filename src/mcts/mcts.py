@@ -44,13 +44,21 @@ class McNode:
         action_index = np.argmax(self.uct_scores)
         return self.children[action_index], self.visit_count
 
+    def compute_visits_counts(self) -> np.ndarray:
+        visits = [(action, child.visit_count) for action, child in self.children.items()]
+        visits_counts = np.zeros((ACTION_COUNT,))
+        for action, count in visits:
+            visits_counts[action] = count
+        return visits_counts
+
 
 class MCTS:
-    def __init__(self, networks: AlphaZeroNNs, num_worlds: int, num_simulations: int, c_puct_value: int = 1):
+    def __init__(self, networks: AlphaZeroNNs, num_worlds: int, num_simulations: int, c_puct_value: int = 1, policy_temp: float = 1.0):
         self.networks = networks
         self.num_worlds = num_worlds
         self.num_simulations = num_simulations
         self.c_puct_value = c_puct_value
+        self.policy_temp = policy_temp
 
     # ROLLOUT:
     # zwiększ ilość odwiedzeń node'a o 1
@@ -63,13 +71,28 @@ class MCTS:
     # policz value (jeżeli przegrany/wygrany, to znamy wartość, w przeciwnym wypadku użyj value network)
     # propaguj value w górę drzewa i zwiększ nagrodę gracza, który gra aktualnie w danym stanie
 
-    def run(self, game_state: GameState):
+    @staticmethod
+    def compute_action_probs(visit_counts: np.ndarray, temp: float) -> np.ndarray:
+        if temp == 0:
+            best_action = np.argmax(visit_counts)
+            action_probs = np.zeros_like(visit_counts)
+            action_probs[best_action] = 1.0
+            return action_probs
+        else:
+            visit_counts_temp = visit_counts ** (1 / temp) # TODO: check if correct, maybe softmax?
+            total_counts = np.sum(visit_counts_temp)
+            if total_counts == 0:
+                return np.ones_like(visit_counts) / len(visit_counts)
+            return visit_counts_temp / total_counts
+
+    def run(self, game_state: GameState) -> tuple[np.ndarray, np.ndarray]:
         root_values = np.zeros(game_state.no_players)
         root_actions = np.zeros(ACTION_COUNT)
 
         for _ in range(self.num_worlds):
             prepared_game_state = StateProcessor.get_mcts_state(game_state)
             root = McNode(1.0, prepared_game_state)
+            current_values = np.zeros(game_state.no_players)
             for _ in range(self.num_simulations):
                 rollout_path, leaf = self.explore(root)
 
@@ -86,6 +109,16 @@ class MCTS:
                     values[leaf.state.current_player] = -1
 
                 self.backpropagate(rollout_path, values)
+                current_values += values
+
+            root_values += current_values / self.num_simulations # TODO: check if rotation is needed
+            root_actions += root.compute_visits_counts()
+
+        avg_root_values = root_values / self.num_worlds
+        avg_root_actions = root_actions / self.num_worlds
+        action_probs = self.compute_action_probs(avg_root_actions, self.policy_temp)
+
+        return action_probs, avg_root_values
 
     def explore(self, root: McNode) -> tuple[list[tuple[McNode, int]], McNode]:
         node = root
@@ -102,7 +135,7 @@ class MCTS:
             child.visit_count += 1
             child.value_sum += values[node.state.current_player]
 
-        # I don't know, add 1 to root visit count too
+        # I don't know, add 1 to root visit count too, maybe not?
 
     def search(self, prepared_game_state: GameState):
         pass

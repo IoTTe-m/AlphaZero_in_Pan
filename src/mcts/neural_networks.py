@@ -6,6 +6,9 @@ from jax import numpy as jnp, jit
 
 
 class ValueNetwork(nn.Module):
+    """
+    Gets comprehensive state of the game, returns how good each player stands
+    """
     no_players: int
     suits_count: int
     ranks_count: int
@@ -35,6 +38,9 @@ class ValueNetwork(nn.Module):
 
 
 class PolicyNetwork(nn.Module):
+    """
+    Gets partial state of the game (player POV), returns probability of each action
+    """
     actions_space_size: int
 
     def setup(self):
