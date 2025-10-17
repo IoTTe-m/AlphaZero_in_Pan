@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 from src.game_logic import ACTION_COUNT, GameState
-from src.mcts.neural_networks import call_value_network, call_policy_network, AlphaZeroNNs
+from src.ml.neural_networks import call_value_network, call_policy_network, AlphaZeroNNs
 import numpy as np
 
 from src.mcts.state_processors import StateProcessor, ValueStateProcessor, PolicyStateProcessor
