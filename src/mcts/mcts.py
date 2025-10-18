@@ -29,7 +29,6 @@ class McNode:
         return sum(self.state.is_done_array) == self.state.no_players - 1
 
     def expand(self, az_networks: AlphaZeroNNs, c_puct_value: float):
-        current_player = self.state.current_player
         *policy_args, actions_list = PolicyStateProcessor.encode(self.state)
         action_probs = call_policy_network(az_networks.policy_network, az_networks.policy_network_params, *policy_args)
         for legal_action in actions_list:
@@ -50,6 +49,9 @@ class McNode:
         for action, count in visits:
             visit_counts[action] = count
         return visit_counts
+
+    def is_player_finished(self, player_number: int) -> bool:
+        return self.state.is_done_array[player_number]
 
 
 class MCTS:
@@ -102,6 +104,9 @@ class MCTS:
                     shifted_values = call_value_network(self.networks.value_network, self.networks.value_network_params,
                                                         *value_args)
                     values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
+
+                    values[leaf.state.is_done_array] = 1 / (leaf.state.no_players - 1)
+
                     _, leaf_action = leaf.select_child()
                     rollout_path.append((leaf, leaf_action))
                 else:

@@ -1,5 +1,5 @@
 import optax
-from jax import numpy as jnp
+import wandb
 
 from src.ml.learning import LearningProcess
 from src.ml.neural_networks import ValueNetwork, PolicyNetwork, AlphaZeroNNs
@@ -7,15 +7,13 @@ from src.game_logic import SUITS, RANKS, ACTION_COUNT
 import jax
 import jax.numpy as jnp
 
-'''
-'''
 def main():
     LEARNING_RATE = 1e-4
     BATCH_SIZE = 32
-    BATCH_COUNT = 16
+    BATCH_COUNT = 32
     GAMES_PER_TRAINING = 4
-    NUM_SIMULATIONS = 1
-    NUM_WORLDS = 1
+    NUM_SIMULATIONS = 2048
+    NUM_WORLDS = 16
     MAX_BUFFER_SIZE = 1024
     C_PUCT_VALUE = 1
     POLICY_TEMP = 1.0

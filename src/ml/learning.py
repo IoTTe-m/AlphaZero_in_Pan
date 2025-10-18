@@ -1,5 +1,7 @@
 from collections import deque
 import numpy as np
+from tqdm import tqdm
+from decimal import Decimal
 from jax import numpy as jnp
 from typing import TypeAlias
 import optax
@@ -12,9 +14,13 @@ ValueStateRepr: TypeAlias = tuple[jnp.ndarray, jnp.ndarray]
 PolicyStateRepr: TypeAlias = tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
 BufferItem: TypeAlias = tuple[ValueStateRepr, PolicyStateRepr, np.ndarray, np.ndarray]
 
+def format_e(n):
+    a = '%E' % n
+    return a.split('E')[0].rstrip('0').rstrip('.') + 'E' + a.split('E')[1]
+
 class LearningProcess:
     def __init__(self, nns: AlphaZeroNNs, no_players: int, batch_size: int = 32,
-                 games_per_training: int = 4, num_simulations: int = 256, num_worlds: int = 16,
+                 games_per_training: int = 4, num_simulations: int = 2048, num_worlds: int = 16,
                  max_buffer_size: int = 1024, c_puct_value: int = 1,
                  policy_temp: float = 1.0, max_game_length: int = 5000):
         self.no_players = no_players
@@ -32,7 +38,8 @@ class LearningProcess:
 
     def play_game(self):
         state = GameState(no_players=self.no_players)
-        for _ in range(self.max_game_length):
+        pbar = tqdm(range(self.max_game_length), desc="Max game length:", leave=False)
+        for _ in pbar:
             policy_probs, values = self.mcts.run(state)
 
             value_state = ValueStateProcessor.encode(state)
@@ -43,22 +50,26 @@ class LearningProcess:
             if is_end:
                 break
 
-    def train_networks(self, batch_count: int):
+    def train_networks(self, batch_count: int) -> tuple[float, float]:
         """
         Samples a batch from the buffer and trains both neural networks.
         """
-
+        avg_value_loss = 0.0
+        avg_policy_loss = 0.0
         for batch_num in range(batch_count):
-            print(f"training batch {batch_num}")
-            self._train_value_step()
-            self._train_policy_step()
+            avg_value_loss += self._train_value_step() / batch_count
+            avg_policy_loss += self._train_policy_step() / batch_count
+        return avg_value_loss, avg_policy_loss
 
     def self_play(self, epochs: int, batch_count: int):
-        for epoch in range(epochs):
-            print(f"STARTING EPOCH NUMERO {epoch} 🙂💀💀💀🙂")
-            for _ in range(self.games_per_training):
+        epoch_pbar = tqdm(range(epochs), total=epochs, desc="value loss: inf, policy loss: inf")
+
+        for epoch in epoch_pbar:
+            games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc="gameing 😎🎮", leave=False)
+            for _ in games_pbar:
                 self.play_game()
-            self.train_networks(batch_count)
+            avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
+            epoch_pbar.set_description(f"value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}")
 
     def _train_value_step(self) -> float:
         prepared_player_hands, table_states, target_values = self._sample_value_batch()
