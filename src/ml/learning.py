@@ -6,10 +6,10 @@ import optax
 from src.game_logic import GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
-from src.ml.neural_networks import AlphaZeroNNs, PolicyNetwork, ValueNetwork, call_policy_network, call_value_network, compute_value_loss_and_grad, compute_policy_loss_and_grad
+from src.ml.neural_networks import AlphaZeroNNs, PolicyNetwork, ValueNetwork, call_policy_network, call_value_network, compute_value_loss_and_grad_vect, compute_policy_loss_and_grad_vect
 
 ValueStateRepr: TypeAlias = tuple[jnp.ndarray, jnp.ndarray]
-PolicyStateRepr: TypeAlias = tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, list[int]]
+PolicyStateRepr: TypeAlias = tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
 BufferItem: TypeAlias = tuple[ValueStateRepr, PolicyStateRepr, np.ndarray, np.ndarray]
 
 class LearningProcess:
@@ -36,31 +36,33 @@ class LearningProcess:
             policy_probs, values = self.mcts.run(state)
 
             value_state = ValueStateProcessor.encode(state)
-            policy_state = PolicyStateProcessor.encode(state)
+            *policy_state, _ = PolicyStateProcessor.encode(state)
             self.buffer.append((value_state, policy_state, policy_probs, values))
             action = np.random.choice(len(policy_probs), p=policy_probs)
             is_end = state.execute_action(action)
             if is_end:
                 break
 
-    def train_networks(self, batch_count: int = 16):
+    def train_networks(self, batch_count: int):
         """
         Samples a batch from the buffer and trains both neural networks.
         """
 
-        for _ in range(batch_count):
+        for batch_num in range(batch_count):
+            print(f"training batch {batch_num}")
             self._train_value_step()
             self._train_policy_step()
 
-    def self_play(self, epochs: int):
-        for _ in range(epochs):
+    def self_play(self, epochs: int, batch_count: int):
+        for epoch in range(epochs):
+            print(f"STARTING EPOCH NUMERO {epoch} 🙂💀💀💀🙂")
             for _ in range(self.games_per_training):
                 self.play_game()
-            self.train_networks()
+            self.train_networks(batch_count)
 
     def _train_value_step(self) -> float:
         prepared_player_hands, table_states, target_values = self._sample_value_batch()
-        value_loss, value_grads = compute_value_loss_and_grad(
+        value_loss, value_grads = compute_value_loss_and_grad_vect(
             self.mcts.networks.value_network,
             self.mcts.networks.value_network_params,
             prepared_player_hands,
@@ -72,14 +74,13 @@ class LearningProcess:
         return value_loss.item()
 
     def _train_policy_step(self) -> float:
-        prepared_knowledge, table_states, encoded_actions, possible_actions, target_policies = self._sample_policy_batch()
-        policy_loss, policy_grads = compute_policy_loss_and_grad(
+        prepared_knowledge, table_states, encoded_actions, target_policies = self._sample_policy_batch()
+        policy_loss, policy_grads = compute_policy_loss_and_grad_vect(
             self.mcts.networks.policy_network,
             self.mcts.networks.policy_network_params,
             prepared_knowledge,
             table_states,
             encoded_actions,
-            possible_actions,
             target_policies
         )
         updates, self.mcts.networks.policy_network_opt_state = self.mcts.networks.policy_network_optimizer.update(policy_grads, self.mcts.networks.policy_network_opt_state)
@@ -87,21 +88,20 @@ class LearningProcess:
         return policy_loss.item()
 
     def _sample_value_batch(self) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        samples_indices = np.random.choice(len(self.buffer), size=self.batch_size, replace=False)
+        no_samples = min(self.batch_size, len(self.buffer))
+        samples_indices = np.random.choice(len(self.buffer), size=no_samples, replace=False)
         sampled = [self.buffer[i] for i in samples_indices]
-
         data_to_unpack, _, _, target_values = tuple(map(list, zip(*sampled)))
         prepared_player_hands, table_states = tuple(map(list, zip(*data_to_unpack)))
 
-        return (jnp.array(prepared_player_hands), jnp.array(table_states), jnp.array(target_values))
+        return jnp.array(prepared_player_hands), jnp.array(table_states), jnp.array(target_values)
 
-    def _sample_policy_batch(self) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def _sample_policy_batch(self) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         samples_indices = np.random.choice(len(self.buffer), size=self.batch_size, replace=False)
         sampled = [self.buffer[i] for i in samples_indices]
 
         _, tuples, target_policies, _ = tuple(map(list, zip(*sampled)))
-        table_states, prepared_knowledge, encoded_actions, possible_actions =  tuple(map(list, zip(*tuples)))
+        table_states, prepared_knowledge, encoded_actions =  tuple(map(list, zip(*tuples)))
 
         target_policies = [target_policy for _, _, target_policy, _ in sampled]
-        return (jnp.array(prepared_knowledge), jnp.array(table_states), jnp.array(encoded_actions),
-                jnp.array(possible_actions), jnp.array(target_policies))
+        return jnp.array(prepared_knowledge), jnp.array(table_states), jnp.array(encoded_actions), jnp.array(target_policies)

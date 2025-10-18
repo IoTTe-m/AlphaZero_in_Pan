@@ -42,7 +42,7 @@ class McNode:
 
     def select_child(self) -> tuple['McNode', int]:
         action_index = np.argmax(self.uct_scores)
-        return self.children[action_index], self.visit_count
+        return self.children[action_index], int(action_index)
 
     def compute_visit_counts(self) -> np.ndarray:
         visits = [(action, child.visit_count) for action, child in self.children.items()]

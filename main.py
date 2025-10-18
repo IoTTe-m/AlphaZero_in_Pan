@@ -12,15 +12,16 @@ import jax.numpy as jnp
 def main():
     LEARNING_RATE = 1e-4
     BATCH_SIZE = 32
+    BATCH_COUNT = 16
     GAMES_PER_TRAINING = 4
-    NUM_SIMULATIONS = 256
-    NUM_WORLDS = 16
+    NUM_SIMULATIONS = 1
+    NUM_WORLDS = 1
     MAX_BUFFER_SIZE = 1024
     C_PUCT_VALUE = 1
     POLICY_TEMP = 1.0
     MAX_GAME_LENGTH = 5000
     EPOCHS = 3
-    PLAYER_COUNT = 34
+    PLAYER_COUNT = 4
     
     value_network = ValueNetwork(PLAYER_COUNT, len(SUITS), len(RANKS))
     policy_network = PolicyNetwork(ACTION_COUNT)
@@ -28,12 +29,14 @@ def main():
     rng = jax.random.PRNGKey(0)
 
     rng, init_rng = jax.random.split(rng)
+    # input_size = (self.no_players + self.suits_count + self.ranks_count) * self.suits_count * self.ranks_count
     value_network_params = value_network.init(
-        init_rng, jnp.zeros((1, PLAYER_COUNT)), jnp.zeros((1, len(SUITS), len(RANKS)))
+        init_rng, jnp.zeros((1, len(SUITS), len(RANKS), PLAYER_COUNT + 1)), jnp.zeros((1, len(SUITS) * len(RANKS), len(SUITS)+len(RANKS)))
     )
     rng, init_rng = jax.random.split(rng)
+    # input_size = (self.no_players + self.suits_count + self.ranks_count) * self.suits_count * self.ranks_count
     policy_network_params = policy_network.init(
-        init_rng, jnp.zeros((1, PLAYER_COUNT)), jnp.zeros((1, len(SUITS), len(RANKS))), jnp.zeros((1, ACTION_COUNT))
+        init_rng, jnp.zeros((1, len(SUITS), len(RANKS), PLAYER_COUNT + 1)), jnp.zeros((1, len(SUITS) * len(RANKS), len(SUITS)+len(RANKS))), jnp.zeros((1, ACTION_COUNT))
     )
 
     optimizer_chain_value = optax.chain(
@@ -71,7 +74,7 @@ def main():
         policy_temp=POLICY_TEMP,
     )
 
-    learning.train_networks(EPOCHS)
+    learning.self_play(EPOCHS, BATCH_COUNT)
     print("pog")
 
 if __name__ == '__main__':

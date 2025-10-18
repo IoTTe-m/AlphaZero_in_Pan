@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from functools import partial
 
 from flax import linen as nn
-from jax import numpy as jnp, jit, value_and_grad
+import jax
+from jax import numpy as jnp, jit, value_and_grad, vmap
 import optax
 
 
@@ -108,12 +109,38 @@ def compute_policy_loss(policy_network: PolicyNetwork, params: dict, prepared_kn
         table_states,
         encoded_actions
     )
-    loss = -jnp.mean(jnp.sum(target_policies * jnp.log(logits + 1e-8), axis=1))
+
+    loss = -jnp.mean(jnp.sum(target_policies * jnp.log(logits + 1e-8), axis=-1))
     return loss
 
 
-compute_value_loss_and_grad = jit(value_and_grad(compute_value_loss, argnums=1))
-compute_policy_loss_and_grad = jit(value_and_grad(compute_policy_loss, argnums=1))
+compute_value_loss_vect_raw = vmap(
+    compute_value_loss,
+    in_axes=(None, None, 0, 0, 0),
+    out_axes=0
+)
+compute_policy_loss_vect_raw = vmap(
+    compute_policy_loss,
+    in_axes=(None, None, 0, 0, 0, 0),
+    out_axes=0
+)
+
+def compute_value_loss_vect(value_network: ValueNetwork, params: optax.Params, prepared_player_hands: jnp.ndarray,
+                            table_states: jnp.ndarray, target_values: jnp.ndarray) -> jnp.ndarray:
+    return compute_value_loss_vect_raw(value_network, params, prepared_player_hands, table_states, target_values).mean()
+
+def compute_policy_loss_vect(policy_network: PolicyNetwork, params: dict, prepared_knowledge: jnp.ndarray,
+                             table_states: jnp.ndarray, encoded_actions: jnp.ndarray,
+                             target_policies: jnp.ndarray) -> jnp.ndarray:
+    return compute_policy_loss_vect_raw(policy_network, params, prepared_knowledge, table_states, encoded_actions, target_policies).mean()
+
+
+compute_value_loss_and_grad_vect = jit(
+    value_and_grad(compute_value_loss_vect, argnums=1), static_argnames=('value_network',)
+)
+compute_policy_loss_and_grad_vect = jit(
+    value_and_grad(compute_policy_loss_vect, argnums=1), static_argnames=('policy_network',)
+)
 
 
 @dataclass

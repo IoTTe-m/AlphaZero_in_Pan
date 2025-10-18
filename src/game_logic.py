@@ -13,16 +13,14 @@ class GameState:
 
         self.cards_count = len(suits_to_numbers) * len(ranks_to_numbers)
         self.no_players = no_players
-        self.player_hands = -np.ones((len(suits_to_numbers), len(ranks_to_numbers)))
-        self.table_state = np.zeros((self.cards_count, 10))
+        self.player_hands = -np.ones((len(suits_to_numbers), len(ranks_to_numbers)), dtype=np.int32)
+        self.table_state = np.zeros((self.cards_count, 10), dtype=np.int32)
         self.current_player = -1
         self.cards_on_table = 0
-        self.is_done_array = np.zeros(self.no_players)
-        self.knowledge_table = -np.ones((self.no_players, len(suits_to_numbers), len(ranks_to_numbers)))
+        self.is_done_array = np.zeros(self.no_players, dtype=np.int32)
+        self.knowledge_table = -np.ones((self.no_players, len(suits_to_numbers), len(ranks_to_numbers)), dtype=np.int32)
 
         self.restart()
-        print(self.cards_on_table)
-        print(self.player_hands)
 
     @staticmethod
     def print_hand(ranks: np.ndarray, suits: np.ndarray) -> str:
@@ -54,19 +52,19 @@ class GameState:
         # rows: suits
         # columns: ranks
         cards_per_player = self.cards_count // self.no_players
-        cards = np.repeat(np.arange(0, self.no_players), cards_per_player)
+        cards = np.repeat(np.arange(0, self.no_players, dtype=np.int32), cards_per_player)
         np.random.shuffle(cards)
         cards = np.reshape(cards, (len(suits_to_numbers), -1))
         return cards
 
     def restart(self):
         self.player_hands = self.prepare_deal()
-        self.table_state = np.zeros((24, 10))
+        self.table_state = np.zeros((24, 10), dtype=np.int32)
         self.current_player = self.get_starting_player()
         self.cards_on_table = 0
-        self.is_done_array = np.zeros(self.no_players)
+        self.is_done_array = np.zeros(self.no_players, dtype=np.int32)
         # -2: card is on the table, -1: we don't know where the card is
-        self.knowledge_table = -np.ones((self.no_players, len(suits_to_numbers), len(ranks_to_numbers)))
+        self.knowledge_table = -np.ones((self.no_players, len(suits_to_numbers), len(ranks_to_numbers)), dtype=np.int32)
         GameState.fill_knowledge_table(self.knowledge_table, self.player_hands, self.no_players)
 
     def print_table(self):
@@ -143,7 +141,7 @@ class GameState:
                 self.cards_on_table -= 1
                 card_encoding = self.table_state[self.cards_on_table]
                 rank, suit = GameState.decode_card(card_encoding)
-                self.table_state[self.cards_on_table] = np.zeros(10)
+                self.table_state[self.cards_on_table] = np.zeros(10, dtype=np.int32)
                 self.player_hands[suit][rank] = player
                 self.knowledge_table[:, suit, rank] = player
 
@@ -206,8 +204,18 @@ class GameState:
         return self.knowledge_table[self.current_player]
 
     def get_hands_card_counts(self) -> np.ndarray:
-        _, cards_counts = np.unique(self.get_player_hand(self.current_player), return_counts=True, sorted=True)
-        return cards_counts
+        '''
+        Counts how many unknown cards each player has.
+        '''
+        filtered_player_hands = self.player_hands[self.player_hands >= 0]
+        player_indices, card_counts = np.unique(filtered_player_hands, return_counts=True, sorted=True)
+        current_knowledge = self.get_player_knowledge()
+        filtered_knowledge = current_knowledge[current_knowledge >= 0]
+        knowledge_player_indices, cards_per_player = np.unique(filtered_knowledge, return_counts=True, sorted=True)
+        result = np.zeros(self.no_players, dtype=np.int32)
+        result[player_indices] = card_counts
+        result[knowledge_player_indices] -= cards_per_player
+        return result
 
 
 # table = GameState()
