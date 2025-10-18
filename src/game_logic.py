@@ -210,31 +210,31 @@ class GameState:
         return cards_counts
 
 
-table = GameState()
-score = [0, 0, 0, 0]
-suit_symbols = ['♥', '♦', '♣', '♠']
+# table = GameState()
+# score = [0, 0, 0, 0]
+# suit_symbols = ['♥', '♦', '♣', '♠']
 
-for _ in range(10):
-    table.restart()
-    for _ in range(10000):
-        card_encoding = table.table_state[table.cards_on_table - 1]
-        print()
-        print(f'Current player: {table.current_player}')
-        if table.cards_on_table > 0:
-            rank, suit = GameState.decode_card(card_encoding)
-            print(f'Top card: {RANKS[rank]}{suit_symbols[suit]}')
-        else:
-            print('Top card: none')
-        print(
-            f'0: {GameState.print_hand(table.get_player_hand(0)[0], table.get_player_hand(0)[1])} {table.get_possible_actions(0)}')
-        print(
-            f'1: {GameState.print_hand(table.get_player_hand(1)[0], table.get_player_hand(1)[1])} {table.get_possible_actions(1)}')
-        print(
-            f'2: {GameState.print_hand(table.get_player_hand(2)[0], table.get_player_hand(2)[1])} {table.get_possible_actions(2)}')
-        print(
-            f'3: {GameState.print_hand(table.get_player_hand(3)[0], table.get_player_hand(3)[1])} {table.get_possible_actions(3)}')
-        if table.execute_action(table.get_possible_actions(table.current_player)[0]):
-            score[table.current_player] += 1
-            break
+# for _ in range(10):
+#     table.restart()
+#     for _ in range(10000):
+#         card_encoding = table.table_state[table.cards_on_table - 1]
+#         print()
+#         print(f'Current player: {table.current_player}')
+#         if table.cards_on_table > 0:
+#             rank, suit = GameState.decode_card(card_encoding)
+#             print(f'Top card: {RANKS[rank]}{suit_symbols[suit]}')
+#         else:
+#             print('Top card: none')
+#         print(
+#             f'0: {GameState.print_hand(table.get_player_hand(0)[0], table.get_player_hand(0)[1])} {table.get_possible_actions(0)}')
+#         print(
+#             f'1: {GameState.print_hand(table.get_player_hand(1)[0], table.get_player_hand(1)[1])} {table.get_possible_actions(1)}')
+#         print(
+#             f'2: {GameState.print_hand(table.get_player_hand(2)[0], table.get_player_hand(2)[1])} {table.get_possible_actions(2)}')
+#         print(
+#             f'3: {GameState.print_hand(table.get_player_hand(3)[0], table.get_player_hand(3)[1])} {table.get_possible_actions(3)}')
+#         if table.execute_action(table.get_possible_actions(table.current_player)[0]):
+#             score[table.current_player] += 1
+#             break
 
-print(score)
+# print(score)

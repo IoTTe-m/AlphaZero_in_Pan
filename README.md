@@ -2,4 +2,4 @@
 
 ## Install
 Just do `uv run main.py`.  
-If you want to train NN, also do `uv pip install -e .[ml]`
+If you want to train NN, also do `uv sync --group ml`
