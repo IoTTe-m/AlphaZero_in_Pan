@@ -30,6 +30,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "numpy" },
+    { name = "optax" },
     { name = "pre-commit" },
 ]
 
@@ -46,6 +47,7 @@ ml = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.3.3" },
+    { name = "optax", specifier = ">=0.2.6" },
     { name = "pre-commit", specifier = ">=4.3.0" },
 ]
 

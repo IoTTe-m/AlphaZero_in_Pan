@@ -34,7 +34,7 @@ class McNode:
         action_probs = call_policy_network(az_networks.policy_network, az_networks.policy_network_params, *policy_args)
         for legal_action in actions_list:
             new_state = deepcopy(self.state)
-            is_win_state = new_state.execute_action(current_player, legal_action)
+            is_win_state = new_state.execute_action(legal_action)
             # TODO: verify
             child = McNode(prior=float(action_probs[legal_action]), state=new_state)
             self.children[legal_action] = child
@@ -44,12 +44,12 @@ class McNode:
         action_index = np.argmax(self.uct_scores)
         return self.children[action_index], self.visit_count
 
-    def compute_visits_counts(self) -> np.ndarray:
+    def compute_visit_counts(self) -> np.ndarray:
         visits = [(action, child.visit_count) for action, child in self.children.items()]
-        visits_counts = np.zeros((ACTION_COUNT,))
+        visit_counts = np.zeros((ACTION_COUNT,))
         for action, count in visits:
-            visits_counts[action] = count
-        return visits_counts
+            visit_counts[action] = count
+        return visit_counts
 
 
 class MCTS:
@@ -112,7 +112,7 @@ class MCTS:
                 current_values += values
 
             root_values += current_values / self.num_simulations # TODO: check if rotation is needed
-            root_actions += root.compute_visits_counts()
+            root_actions += root.compute_visit_counts()
 
         avg_root_values = root_values / self.num_worlds
         avg_root_actions = root_actions / self.num_worlds
@@ -134,8 +134,4 @@ class MCTS:
             child = node.children[action]
             child.visit_count += 1
             child.value_sum += values[node.state.current_player]
-
-        # I don't know, add 1 to root visit count too, maybe not?
-
-    def search(self, prepared_game_state: GameState):
-        pass
+        

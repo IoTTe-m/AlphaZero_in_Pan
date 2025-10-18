@@ -88,7 +88,7 @@ class GameState:
         self.player_hands[suit][rank] = -1
         self.knowledge_table[:, suit, rank] = -2
 
-    def execute_action(self, player: int, action: int) -> bool:
+    def execute_action(self, action: int) -> bool:
         # returns True if action results in player victory
         # else returns False
 
@@ -102,6 +102,8 @@ class GameState:
         # 42-45 - play four Ks
         # 46-49 - play four As
         # 50 - take cards from table
+
+        player = self.current_player
 
         if action < 24:
             rank = action % 6
@@ -231,7 +233,7 @@ for _ in range(10):
             f'2: {GameState.print_hand(table.get_player_hand(2)[0], table.get_player_hand(2)[1])} {table.get_possible_actions(2)}')
         print(
             f'3: {GameState.print_hand(table.get_player_hand(3)[0], table.get_player_hand(3)[1])} {table.get_possible_actions(3)}')
-        if table.execute_action(table.current_player, table.get_possible_actions(table.current_player)[0]):
+        if table.execute_action(table.get_possible_actions(table.current_player)[0]):
             score[table.current_player] += 1
             break
 
