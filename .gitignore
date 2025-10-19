@@ -128,5 +128,6 @@ dmypy.json
 .idea/
 .python-version
 
-# wandb
+# jax checkpoints and monitoring
 wandb/
+checkpoints/

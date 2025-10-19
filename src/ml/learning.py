@@ -1,11 +1,13 @@
 from collections import deque
+from pathlib import Path
 import numpy as np
 import wandb
 from tqdm import tqdm
-from decimal import Decimal
 from jax import numpy as jnp
 from typing import TypeAlias
+from flax import nnx
 import optax
+import orbax.checkpoint as ocp
 from src.game_logic import GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
@@ -20,18 +22,26 @@ def format_e(n):
     return a.split('E')[0].rstrip('0').rstrip('.') + 'E' + a.split('E')[1]
 
 class LearningProcess:
-    def __init__(self, run: wandb.Run, nns: AlphaZeroNNs, no_players: int, batch_size: int = 32,
+    def __init__(self, run: wandb.Run, save_dir: str, nns: AlphaZeroNNs, no_players: int, batch_size: int = 32,
                  games_per_training: int = 4, num_simulations: int = 2048, num_worlds: int = 16,
                  max_buffer_size: int = 1024, c_puct_value: int = 1,
                  policy_temp: float = 1.0, initial_max_game_length: int = 50,
                  capped_max_game_length: int = 500, game_length_increment: int = 20):
         self.run = run
+        self.save_dir = save_dir
         self.no_players = no_players
         self.batch_size = batch_size
         self.games_per_training = games_per_training
         self.max_game_length = initial_max_game_length
         self.capped_max_game_length = capped_max_game_length
         self.game_length_increment = game_length_increment
+
+        save_path = Path(f"{self.save_dir}/run_{self.run.name}").absolute()
+        checkpointer = ocp.StandardCheckpointer()
+        options = ocp.CheckpointManagerOptions(max_to_keep=2, create=True)
+        self.manager = ocp.CheckpointManager(
+            save_path, checkpointer, options
+        )
 
         self.buffer: deque[BufferItem] = deque(maxlen=max_buffer_size)  # buffer of (state_value, state_policy, policy, value) tuples
         self.mcts = MCTS(
@@ -48,17 +58,24 @@ class LearningProcess:
     def self_play(self, epochs: int, batch_count: int):
         epoch_pbar = tqdm(range(epochs), total=epochs, desc="value loss: inf, policy loss: inf")
 
-        for _ in epoch_pbar:
+        for epoch in epoch_pbar:
             games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc="gameing 😎🎮", leave=False)
             for _ in games_pbar:
                 self.play_game()
             avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
             epoch_pbar.set_description(f"value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}")
-            self.run.log({
+
+            self.manager.save(
+                step=epoch,
+                items=self.mcts.networks.get_state(epoch)
+            )
+
+            self.run.log(data={
                 "value_loss": avg_value_loss,
                 "policy_loss": avg_policy_loss
             })
         self._increase_max_game_length()
+        self.manager.close() # TODO: move
 
     def play_game(self):
         state = GameState(no_players=self.no_players)
@@ -122,7 +139,8 @@ class LearningProcess:
         return jnp.array(prepared_player_hands), jnp.array(table_states), jnp.array(target_values)
 
     def _sample_policy_batch(self) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        samples_indices = np.random.choice(len(self.buffer), size=self.batch_size, replace=False)
+        no_samples = min(self.batch_size, len(self.buffer))
+        samples_indices = np.random.choice(len(self.buffer), size=no_samples, replace=False)
         sampled = [self.buffer[i] for i in samples_indices]
 
         _, tuples, target_policies, _ = tuple(map(list, zip(*sampled)))

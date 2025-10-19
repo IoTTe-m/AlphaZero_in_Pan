@@ -10,24 +10,24 @@ import jax.numpy as jnp
 def main():
     LEARNING_RATE = 1e-4
     BATCH_SIZE = 32
-    BATCH_COUNT = 32
-    # GAMES_PER_TRAINING = 4
-    # NUM_SIMULATIONS = 2048
-    # NUM_WORLDS = 16
+    BATCH_COUNT = 8
 
-    # DEBUG LAMBDA PARAMETERS
     GAMES_PER_TRAINING = 1
     NUM_SIMULATIONS = 512
     NUM_WORLDS = 4
 
     MAX_BUFFER_SIZE = 1024
     C_PUCT_VALUE = 1
-    POLICY_TEMP = 1.0
+    POLICY_TEMP = 0.2
+
     INITIAL_MAX_GAME_LENGTH = 30
     CAPPED_MAX_GAME_LENGTH = 500
-    GAME_LENGTH_INCREMENT = 20
-    EPOCHS = 3
+    GAME_LENGTH_INCREMENT = 10
+
+    EPOCHS = 100
     PLAYER_COUNT = 4
+
+    SAVE_DIR = "checkpoints/"
 
     run = wandb.init(
         entity="reinforced-annealer",
@@ -91,6 +91,7 @@ def main():
 
     learning = LearningProcess(
         run=run,
+        save_dir=SAVE_DIR,
         nns=alpha_zero_nns,
         no_players=PLAYER_COUNT,
         batch_size=BATCH_SIZE,
@@ -103,11 +104,10 @@ def main():
         initial_max_game_length=INITIAL_MAX_GAME_LENGTH,
         capped_max_game_length=CAPPED_MAX_GAME_LENGTH,
         game_length_increment=GAME_LENGTH_INCREMENT,
-
     )
 
     learning.self_play(EPOCHS, BATCH_COUNT)
-    print("pog")
+    print("done 🥰🥰🥰🥰🥰🥰")
 
 if __name__ == '__main__':
     main()
