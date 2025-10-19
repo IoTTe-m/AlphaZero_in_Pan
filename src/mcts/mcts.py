@@ -18,7 +18,7 @@ class McNode:
 
     @staticmethod
     def puct_score(parent: 'McNode', child: 'McNode', c_puct_value: float) -> float:
-        u_value = c_puct_value * child.prior * np.sqrt(parent.visit_count) / (child.visit_count + 1)
+        u_value = c_puct_value * child.prior * np.sqrt(parent.visit_count + 1) / (child.visit_count + 1) # TODO: verify
         q_value = child.value_sum / child.visit_count if child.visit_count > 0 else 0
         return u_value + q_value
 
@@ -32,6 +32,7 @@ class McNode:
         *policy_args, actions_list = PolicyStateProcessor.encode(self.state)
 
         action_probs = call_policy_network(az_networks.policy_network, az_networks.policy_network_params, *policy_args)
+
         for legal_action in actions_list:
             new_state = deepcopy(self.state)
             is_win_state = new_state.execute_action(legal_action)
@@ -97,6 +98,7 @@ class MCTS:
             root = McNode(1.0, prepared_game_state)
             current_values = np.zeros(game_state.no_players)
             for _ in range(self.num_simulations):
+                root.visit_count += 1
                 rollout_path, leaf = self.explore(root)
 
                 if not leaf.is_terminal():
@@ -123,7 +125,6 @@ class MCTS:
         avg_root_values = root_values / self.num_worlds
         avg_root_actions = root_actions / self.num_worlds
         action_probs = self.compute_action_probs(avg_root_actions, self.policy_temp)
-
         return action_probs, avg_root_values
 
     def explore(self, root: McNode) -> tuple[list[tuple[McNode, int]], McNode]:
@@ -140,4 +141,5 @@ class MCTS:
             child = node.children[action]
             child.visit_count += 1
             child.value_sum += values[node.state.current_player]
+            node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self.c_puct_value)
         

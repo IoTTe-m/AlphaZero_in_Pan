@@ -127,3 +127,6 @@ dmypy.json
 .vscode/
 .idea/
 .python-version
+
+# wandb
+wandb/

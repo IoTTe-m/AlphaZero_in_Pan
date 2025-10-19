@@ -11,15 +11,44 @@ def main():
     LEARNING_RATE = 1e-4
     BATCH_SIZE = 32
     BATCH_COUNT = 32
-    GAMES_PER_TRAINING = 4
-    NUM_SIMULATIONS = 2048
-    NUM_WORLDS = 16
+    # GAMES_PER_TRAINING = 4
+    # NUM_SIMULATIONS = 2048
+    # NUM_WORLDS = 16
+
+    # DEBUG LAMBDA PARAMETERS
+    GAMES_PER_TRAINING = 1
+    NUM_SIMULATIONS = 512
+    NUM_WORLDS = 4
+
     MAX_BUFFER_SIZE = 1024
     C_PUCT_VALUE = 1
     POLICY_TEMP = 1.0
-    MAX_GAME_LENGTH = 5000
+    INITIAL_MAX_GAME_LENGTH = 30
+    CAPPED_MAX_GAME_LENGTH = 500
+    GAME_LENGTH_INCREMENT = 20
     EPOCHS = 3
     PLAYER_COUNT = 4
+
+    run = wandb.init(
+        entity="reinforced-annealer",
+        project="pan-alpha-zero",
+        config={
+            "learning_rate": LEARNING_RATE,
+            "batch_size": BATCH_SIZE,
+            "batch_count": BATCH_COUNT,
+            "games_per_training": GAMES_PER_TRAINING,
+            "num_simulations": NUM_SIMULATIONS,
+            "num_worlds": NUM_WORLDS,
+            "max_buffer_size": MAX_BUFFER_SIZE,
+            "c_puct_value": C_PUCT_VALUE,
+            "policy_temp": POLICY_TEMP,
+            "initial_max_game_length": INITIAL_MAX_GAME_LENGTH,
+            "capped_max_game_length": CAPPED_MAX_GAME_LENGTH,
+            "game_length_increment": GAME_LENGTH_INCREMENT,
+            "epochs": EPOCHS,
+            "player_count": PLAYER_COUNT
+        }
+    )
     
     value_network = ValueNetwork(PLAYER_COUNT, len(SUITS), len(RANKS))
     policy_network = PolicyNetwork(ACTION_COUNT)
@@ -61,7 +90,8 @@ def main():
     )
 
     learning = LearningProcess(
-        alpha_zero_nns,
+        run=run,
+        nns=alpha_zero_nns,
         no_players=PLAYER_COUNT,
         batch_size=BATCH_SIZE,
         games_per_training=GAMES_PER_TRAINING,
@@ -70,6 +100,10 @@ def main():
         max_buffer_size=MAX_BUFFER_SIZE,
         c_puct_value=C_PUCT_VALUE,
         policy_temp=POLICY_TEMP,
+        initial_max_game_length=INITIAL_MAX_GAME_LENGTH,
+        capped_max_game_length=CAPPED_MAX_GAME_LENGTH,
+        game_length_increment=GAME_LENGTH_INCREMENT,
+
     )
 
     learning.self_play(EPOCHS, BATCH_COUNT)

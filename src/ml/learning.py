@@ -1,5 +1,6 @@
 from collections import deque
 import numpy as np
+import wandb
 from tqdm import tqdm
 from decimal import Decimal
 from jax import numpy as jnp
@@ -19,14 +20,19 @@ def format_e(n):
     return a.split('E')[0].rstrip('0').rstrip('.') + 'E' + a.split('E')[1]
 
 class LearningProcess:
-    def __init__(self, nns: AlphaZeroNNs, no_players: int, batch_size: int = 32,
+    def __init__(self, run: wandb.Run, nns: AlphaZeroNNs, no_players: int, batch_size: int = 32,
                  games_per_training: int = 4, num_simulations: int = 2048, num_worlds: int = 16,
                  max_buffer_size: int = 1024, c_puct_value: int = 1,
-                 policy_temp: float = 1.0, max_game_length: int = 5000):
+                 policy_temp: float = 1.0, initial_max_game_length: int = 50,
+                 capped_max_game_length: int = 500, game_length_increment: int = 20):
+        self.run = run
         self.no_players = no_players
         self.batch_size = batch_size
         self.games_per_training = games_per_training
-        self.max_game_length = max_game_length
+        self.max_game_length = initial_max_game_length
+        self.capped_max_game_length = capped_max_game_length
+        self.game_length_increment = game_length_increment
+
         self.buffer: deque[BufferItem] = deque(maxlen=max_buffer_size)  # buffer of (state_value, state_policy, policy, value) tuples
         self.mcts = MCTS(
             networks=nns,
@@ -36,19 +42,27 @@ class LearningProcess:
             policy_temp=policy_temp
         )
 
+    def _increase_max_game_length(self):
+        self.max_game_length = max(self.max_game_length + self.game_length_increment, self.capped_max_game_length)
+
     def self_play(self, epochs: int, batch_count: int):
         epoch_pbar = tqdm(range(epochs), total=epochs, desc="value loss: inf, policy loss: inf")
 
-        for epoch in epoch_pbar:
+        for _ in epoch_pbar:
             games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc="gameing 😎🎮", leave=False)
             for _ in games_pbar:
                 self.play_game()
             avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
             epoch_pbar.set_description(f"value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}")
+            self.run.log({
+                "value_loss": avg_value_loss,
+                "policy_loss": avg_policy_loss
+            })
+        self._increase_max_game_length()
 
     def play_game(self):
         state = GameState(no_players=self.no_players)
-        pbar = tqdm(range(self.max_game_length), desc="Max game length:", leave=False)
+        pbar = tqdm(range(self.max_game_length), desc="Max game length", leave=False)
         for _ in pbar:
             policy_probs, values = self.mcts.run(state)
 
