@@ -36,14 +36,24 @@ class LearningProcess:
             policy_temp=policy_temp
         )
 
+    def self_play(self, epochs: int, batch_count: int):
+        epoch_pbar = tqdm(range(epochs), total=epochs, desc="value loss: inf, policy loss: inf")
+
+        for epoch in epoch_pbar:
+            games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc="gameing 😎🎮", leave=False)
+            for _ in games_pbar:
+                self.play_game()
+            avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
+            epoch_pbar.set_description(f"value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}")
+
     def play_game(self):
         state = GameState(no_players=self.no_players)
         pbar = tqdm(range(self.max_game_length), desc="Max game length:", leave=False)
         for _ in pbar:
             policy_probs, values = self.mcts.run(state)
 
-            value_state = ValueStateProcessor.encode(state)
-            *policy_state, _ = PolicyStateProcessor.encode(state)
+            value_state = ValueStateProcessor.encode(state) # estimate how the game will end from this state 
+            *policy_state, _ = PolicyStateProcessor.encode(state) # estimate best action to take from this state
             self.buffer.append((value_state, policy_state, policy_probs, values))
             action = np.random.choice(len(policy_probs), p=policy_probs)
             is_end = state.execute_action(action)
@@ -60,16 +70,6 @@ class LearningProcess:
             avg_value_loss += self._train_value_step() / batch_count
             avg_policy_loss += self._train_policy_step() / batch_count
         return avg_value_loss, avg_policy_loss
-
-    def self_play(self, epochs: int, batch_count: int):
-        epoch_pbar = tqdm(range(epochs), total=epochs, desc="value loss: inf, policy loss: inf")
-
-        for epoch in epoch_pbar:
-            games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc="gameing 😎🎮", leave=False)
-            for _ in games_pbar:
-                self.play_game()
-            avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
-            epoch_pbar.set_description(f"value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}")
 
     def _train_value_step(self) -> float:
         prepared_player_hands, table_states, target_values = self._sample_value_batch()

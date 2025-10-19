@@ -33,7 +33,7 @@ class StateProcessor:
         filled_hands = flat_knowledge.reshape(current_knowledge.shape)
 
         # Build new knowledge table
-        full_knowledge = -np.ones((state.no_players, len(SUITS), len(RANKS)))
+        full_knowledge = -np.ones((state.no_players, len(SUITS), len(RANKS)), dtype=np.int32)
         GameState.fill_knowledge_table(full_knowledge, filled_hands, state.no_players)
 
         # Create new state

@@ -26,10 +26,11 @@ class McNode:
         return len(self.children) > 0
 
     def is_terminal(self):
-        return sum(self.state.is_done_array) == self.state.no_players - 1
+        return sum(self.state.is_done_array) >= self.state.no_players - 1
 
     def expand(self, az_networks: AlphaZeroNNs, c_puct_value: float):
         *policy_args, actions_list = PolicyStateProcessor.encode(self.state)
+
         action_probs = call_policy_network(az_networks.policy_network, az_networks.policy_network_params, *policy_args)
         for legal_action in actions_list:
             new_state = deepcopy(self.state)
@@ -40,8 +41,8 @@ class McNode:
             self.uct_scores[legal_action] = McNode.puct_score(self, child, c_puct_value)
 
     def select_child(self) -> tuple['McNode', int]:
-        action_index = np.argmax(self.uct_scores)
-        return self.children[action_index], int(action_index)
+        action_index = int(np.argmax(self.uct_scores))
+        return self.children[action_index], action_index
 
     def compute_visit_counts(self) -> np.ndarray:
         visits = [(action, child.visit_count) for action, child in self.children.items()]

@@ -128,7 +128,7 @@ class GameState:
 
         elif action in range(30, 50):
             spade_index = (action - 30) % 4
-            rank = (action - 30) // 4
+            rank = (action - 30) // 4 + 1 # because we start from tens !!!
             card_order = ['H', 'D', 'C']
             card_order.insert(spade_index, 'S')
             for suit in card_order:
