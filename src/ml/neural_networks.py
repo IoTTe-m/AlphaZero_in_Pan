@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from functools import partial
 
 from flax import linen as nn
-import jax
 from jax import numpy as jnp, jit, value_and_grad, vmap
 import optax
 
@@ -153,3 +152,16 @@ class AlphaZeroNNs:
     policy_network_optimizer: optax.GradientTransformation
     value_network_opt_state: optax.OptState
     policy_network_opt_state: optax.OptState
+
+    def get_state(self, step: int) -> dict:
+        return {
+            "step": int(step),
+            "value": {
+                "params": self.value_network_params,
+                "opt_state": self.value_network_opt_state,
+            },
+            "policy": {
+                "params": self.policy_network_params,
+                "opt_state": self.policy_network_opt_state,
+            },
+        }

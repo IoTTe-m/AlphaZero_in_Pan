@@ -9,7 +9,7 @@ from src.game_logic import SUITS, RANKS, ACTION_COUNT, GameState
 class StateProcessor:
     @staticmethod
     def change_perspective(knowledge_array: np.ndarray, player_number: int, no_players: int) -> np.ndarray:
-        return np.where(knowledge_array == -1, -1, (knowledge_array - player_number) % no_players)
+        return np.where(knowledge_array <= -1, knowledge_array, (knowledge_array - player_number) % no_players)
 
     @staticmethod
     def get_mcts_state(state: GameState) -> GameState:
@@ -74,7 +74,7 @@ class ValueStateProcessor:
     def decode(state_values: jnp.ndarray, current_player: int) -> np.ndarray:
         # for player 3: from [3, 0, 1, 2] to [0, 1, 2, 3]
         split_index = len(state_values) - current_player
-        return np.array(jnp.concatenate(([state_values[split_index:], state_values[:split_index]])))
+        return np.array(jnp.concatenate([state_values[split_index:], state_values[:split_index]]))
 
 
 class PolicyStateProcessor:
