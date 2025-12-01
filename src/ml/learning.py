@@ -83,8 +83,9 @@ class LearningProcess:
             policy_probs, values = self.mcts.run(state)
 
             value_state = ValueStateProcessor.encode(state)  # estimate how the game will end from this state
-            *policy_state, _ = PolicyStateProcessor.encode(state)  # estimate best action to take from this state
-            self.buffer.append((value_state, policy_state, policy_probs, values))
+            # estimate best action to take from this state
+            prepared_knowledge_policy, table_state_policy, encoded_action_policy, _ = PolicyStateProcessor.encode(state)
+            self.buffer.append((value_state, (prepared_knowledge_policy, table_state_policy, encoded_action_policy), policy_probs, values))
             action = np.random.choice(len(policy_probs), p=policy_probs)
             is_end = state.execute_action(action)
             if is_end:
