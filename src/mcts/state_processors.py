@@ -3,7 +3,7 @@ from copy import deepcopy
 import numpy as np
 from jax import numpy as jnp
 
-from src.game_logic import SUITS, RANKS, ACTION_COUNT, GameState
+from src.game_logic import ACTION_COUNT, RANKS, SUITS, GameState
 
 
 class StateProcessor:
@@ -81,8 +81,7 @@ class PolicyStateProcessor:
     @staticmethod
     def encode(state: GameState) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, list[int]]:
         current_knowledge = state.get_player_knowledge()
-        prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player,
-                                                               state.no_players)
+        prepared_knowledge = StateProcessor.change_perspective(current_knowledge, state.current_player, state.no_players)
         prepared_knowledge = StateProcessor.one_hot_encode_hands(prepared_knowledge, state.no_players)
         table_state = state.table_state
 

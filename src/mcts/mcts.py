@@ -1,10 +1,10 @@
 from copy import deepcopy
 
-from src.game_logic import ACTION_COUNT, GameState
-from src.ml.neural_networks import call_value_network, call_policy_network, AlphaZeroNNs
 import numpy as np
 
-from src.mcts.state_processors import StateProcessor, ValueStateProcessor, PolicyStateProcessor
+from src.game_logic import ACTION_COUNT, GameState
+from src.mcts.state_processors import PolicyStateProcessor, StateProcessor, ValueStateProcessor
+from src.ml.neural_networks import AlphaZeroNNs, call_policy_network, call_value_network
 
 
 class McNode:
@@ -18,7 +18,7 @@ class McNode:
 
     @staticmethod
     def puct_score(parent: 'McNode', child: 'McNode', c_puct_value: float) -> float:
-        u_value = c_puct_value * child.prior * np.sqrt(parent.visit_count + 1) / (child.visit_count + 1) # TODO: verify
+        u_value = c_puct_value * child.prior * np.sqrt(parent.visit_count + 1) / (child.visit_count + 1)  # TODO: verify
         q_value = child.value_sum / child.visit_count if child.visit_count > 0 else 0
         return u_value + q_value
 
@@ -35,7 +35,7 @@ class McNode:
 
         for legal_action in actions_list:
             new_state = deepcopy(self.state)
-            is_win_state = new_state.execute_action(legal_action)
+            # is_win_state = new_state.execute_action(legal_action)
             # TODO: verify
             child = McNode(prior=float(action_probs[legal_action]), state=new_state)
             self.children[legal_action] = child
@@ -83,7 +83,7 @@ class MCTS:
             action_probs[best_action] = 1.0
             return action_probs
         else:
-            visit_counts_temp = visit_counts ** (1 / temp) # TODO: check if correct, maybe softmax?
+            visit_counts_temp = visit_counts ** (1 / temp)  # TODO: check if correct, maybe softmax?
             total_counts = np.sum(visit_counts_temp)
             if total_counts == 0:
                 return np.ones_like(visit_counts) / len(visit_counts)
@@ -104,8 +104,7 @@ class MCTS:
                 if not leaf.is_terminal():
                     leaf.expand(self.networks, self.c_puct_value)
                     value_args = ValueStateProcessor.encode(leaf.state)
-                    shifted_values = call_value_network(self.networks.value_network, self.networks.value_network_params,
-                                                        *value_args)
+                    shifted_values = call_value_network(self.networks.value_network, self.networks.value_network_params, *value_args)
                     values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
 
                     values[leaf.state.is_done_array] = 1 / (leaf.state.no_players - 1)
@@ -119,7 +118,7 @@ class MCTS:
                 self.backpropagate(rollout_path, values)
                 current_values += values
 
-            root_values += current_values / self.num_simulations # TODO: check if rotation is needed
+            root_values += current_values / self.num_simulations  # TODO: check if rotation is needed
             root_actions += root.compute_visit_counts()
 
         avg_root_values = root_values / self.num_worlds
@@ -142,4 +141,3 @@ class MCTS:
             child.visit_count += 1
             child.value_sum += values[node.state.current_player]
             node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self.c_puct_value)
-        

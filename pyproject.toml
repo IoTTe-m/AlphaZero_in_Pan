@@ -20,6 +20,7 @@ ml = [
 ]
 dev = [
     "ruff>=0.6.4",
+    "pyright>=1.1.407",
 ]
 
 # Ruff configuration

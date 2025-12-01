@@ -128,7 +128,7 @@ class GameState:
 
         elif action in range(30, 50):
             spade_index = (action - 30) % 4
-            rank = (action - 30) // 4 + 1 # because we start from tens !!!
+            rank = (action - 30) // 4 + 1  # because we start from tens !!!
             card_order = ['H', 'D', 'C']
             card_order.insert(spade_index, 'S')
             for suit in card_order:
@@ -204,9 +204,9 @@ class GameState:
         return self.knowledge_table[self.current_player]
 
     def get_hands_card_counts(self) -> np.ndarray:
-        '''
+        """
         Counts how many unknown cards each player has.
-        '''
+        """
         filtered_player_hands = self.player_hands[self.player_hands >= 0]
         player_indices, card_counts = np.unique(filtered_player_hands, return_counts=True, sorted=True)
         current_knowledge = self.get_player_knowledge()
