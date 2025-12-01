@@ -1,15 +1,17 @@
 from dataclasses import dataclass
 from functools import partial
 
-from flax import linen as nn
-from jax import numpy as jnp, jit, value_and_grad, vmap
 import optax
+from flax import linen as nn
+from jax import jit, value_and_grad, vmap
+from jax import numpy as jnp
 
 
 class ValueNetwork(nn.Module):
     """
     Gets comprehensive state of the game, returns how good each player stands
     """
+
     no_players: int
     suits_count: int
     ranks_count: int
@@ -39,20 +41,16 @@ class ValueNetwork(nn.Module):
 
 
 @partial(jit, static_argnames=('value_network',))
-def call_value_network(value_network: ValueNetwork, value_network_params: optax.Params,
-                       prepared_player_hands: jnp.ndarray, table_state: jnp.ndarray) -> jnp.ndarray:
-    return jnp.array(value_network.apply(
-        value_network_params, prepared_player_hands, table_state
-    ))
+def call_value_network(
+    value_network: ValueNetwork, value_network_params: optax.Params, prepared_player_hands: jnp.ndarray, table_state: jnp.ndarray
+) -> jnp.ndarray:
+    return jnp.array(value_network.apply(value_network_params, prepared_player_hands, table_state))
 
-def compute_value_loss(value_network: ValueNetwork, params: optax.Params, prepared_player_hands: jnp.ndarray,
-                       table_states: jnp.ndarray, target_values: jnp.ndarray) -> jnp.ndarray:
-    predicted_values = call_value_network(
-        value_network,
-        params,
-        prepared_player_hands,
-        table_states
-    )
+
+def compute_value_loss(
+    value_network: ValueNetwork, params: optax.Params, prepared_player_hands: jnp.ndarray, table_states: jnp.ndarray, target_values: jnp.ndarray
+) -> jnp.ndarray:
+    predicted_values = call_value_network(value_network, params, prepared_player_hands, table_states)
     loss = jnp.mean((predicted_values - target_values) ** 2)
     return loss
 
@@ -61,6 +59,7 @@ class PolicyNetwork(nn.Module):
     """
     Gets partial state of the game (player POV), returns probability of each action
     """
+
     actions_space_size: int
 
     def setup(self):
@@ -80,8 +79,7 @@ class PolicyNetwork(nn.Module):
             ]
         )
 
-    def __call__(self, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray,
-                 actions_mask: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray, actions_mask: jnp.ndarray) -> jnp.ndarray:
         # a 1 in action_mask means that we want to include this action
         flattened_knowledge = prepared_knowledge.flatten()
         flattened_table = table_state.flatten()
@@ -91,55 +89,49 @@ class PolicyNetwork(nn.Module):
 
 
 @partial(jit, static_argnames=('policy_network',))
-def call_policy_network(policy_network: PolicyNetwork, policy_network_params: dict,
-                        prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray,
-                        actions_mask: jnp.ndarray) -> jnp.ndarray:
-    return jnp.array(policy_network.apply(
-        policy_network_params, prepared_knowledge, table_state, actions_mask
-    ))
+def call_policy_network(
+    policy_network: PolicyNetwork, policy_network_params: dict, prepared_knowledge: jnp.ndarray, table_state: jnp.ndarray, actions_mask: jnp.ndarray
+) -> jnp.ndarray:
+    return jnp.array(policy_network.apply(policy_network_params, prepared_knowledge, table_state, actions_mask))
 
-def compute_policy_loss(policy_network: PolicyNetwork, params: dict, prepared_knowledge: jnp.ndarray,
-                        table_states: jnp.ndarray, encoded_actions: jnp.ndarray,
-                        target_policies: jnp.ndarray) -> jnp.ndarray:
-    logits = call_policy_network(
-        policy_network,
-        params,
-        prepared_knowledge,
-        table_states,
-        encoded_actions
-    )
+
+def compute_policy_loss(
+    policy_network: PolicyNetwork,
+    params: dict,
+    prepared_knowledge: jnp.ndarray,
+    table_states: jnp.ndarray,
+    encoded_actions: jnp.ndarray,
+    target_policies: jnp.ndarray,
+) -> jnp.ndarray:
+    logits = call_policy_network(policy_network, params, prepared_knowledge, table_states, encoded_actions)
 
     loss = -jnp.mean(jnp.sum(target_policies * jnp.log(logits + 1e-8), axis=-1))
     return loss
 
 
-compute_value_loss_vect_raw = vmap(
-    compute_value_loss,
-    in_axes=(None, None, 0, 0, 0),
-    out_axes=0
-)
-compute_policy_loss_vect_raw = vmap(
-    compute_policy_loss,
-    in_axes=(None, None, 0, 0, 0, 0),
-    out_axes=0
-)
+compute_value_loss_vect_raw = vmap(compute_value_loss, in_axes=(None, None, 0, 0, 0), out_axes=0)
+compute_policy_loss_vect_raw = vmap(compute_policy_loss, in_axes=(None, None, 0, 0, 0, 0), out_axes=0)
 
-def compute_value_loss_vect(value_network: ValueNetwork, params: optax.Params, prepared_player_hands: jnp.ndarray,
-                            table_states: jnp.ndarray, target_values: jnp.ndarray) -> jnp.ndarray:
+
+def compute_value_loss_vect(
+    value_network: ValueNetwork, params: optax.Params, prepared_player_hands: jnp.ndarray, table_states: jnp.ndarray, target_values: jnp.ndarray
+) -> jnp.ndarray:
     return compute_value_loss_vect_raw(value_network, params, prepared_player_hands, table_states, target_values).mean()
 
-def compute_policy_loss_vect(policy_network: PolicyNetwork, params: dict, prepared_knowledge: jnp.ndarray,
-                             table_states: jnp.ndarray, encoded_actions: jnp.ndarray,
-                             target_policies: jnp.ndarray) -> jnp.ndarray:
+
+def compute_policy_loss_vect(
+    policy_network: PolicyNetwork,
+    params: dict,
+    prepared_knowledge: jnp.ndarray,
+    table_states: jnp.ndarray,
+    encoded_actions: jnp.ndarray,
+    target_policies: jnp.ndarray,
+) -> jnp.ndarray:
     return compute_policy_loss_vect_raw(policy_network, params, prepared_knowledge, table_states, encoded_actions, target_policies).mean()
 
 
-compute_value_loss_and_grad_vect = jit(
-    value_and_grad(compute_value_loss_vect, argnums=1), static_argnames=('value_network',)
-)
-compute_policy_loss_and_grad_vect = jit(
-    value_and_grad(compute_policy_loss_vect, argnums=1), static_argnames=('policy_network',)
-)
+compute_value_loss_and_grad_vect = jit(value_and_grad(compute_value_loss_vect, argnums=1), static_argnames=('value_network',))
+compute_policy_loss_and_grad_vect = jit(value_and_grad(compute_policy_loss_vect, argnums=1), static_argnames=('policy_network',))
 
 
 @dataclass
@@ -155,13 +147,13 @@ class AlphaZeroNNs:
 
     def get_state(self, step: int) -> dict:
         return {
-            "step": int(step),
-            "value": {
-                "params": self.value_network_params,
-                "opt_state": self.value_network_opt_state,
+            'step': int(step),
+            'value': {
+                'params': self.value_network_params,
+                'opt_state': self.value_network_opt_state,
             },
-            "policy": {
-                "params": self.policy_network_params,
-                "opt_state": self.policy_network_opt_state,
+            'policy': {
+                'params': self.policy_network_params,
+                'opt_state': self.policy_network_opt_state,
             },
         }

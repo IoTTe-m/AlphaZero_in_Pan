@@ -1,32 +1,45 @@
 from collections import deque
 from pathlib import Path
+
 import numpy as np
-import wandb
-from tqdm import tqdm
-from jax import numpy as jnp
-from typing import TypeAlias
-from flax import nnx
 import optax
 import orbax.checkpoint as ocp
+import wandb
+from jax import numpy as jnp
+from tqdm import tqdm
+
 from src.game_logic import GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
-from src.ml.neural_networks import AlphaZeroNNs, PolicyNetwork, ValueNetwork, call_policy_network, call_value_network, compute_value_loss_and_grad_vect, compute_policy_loss_and_grad_vect
+from src.ml.neural_networks import (
+    AlphaZeroNNs,
+    compute_policy_loss_and_grad_vect,
+    compute_value_loss_and_grad_vect,
+)
 
-ValueStateRepr: TypeAlias = tuple[jnp.ndarray, jnp.ndarray]
-PolicyStateRepr: TypeAlias = tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
-BufferItem: TypeAlias = tuple[ValueStateRepr, PolicyStateRepr, np.ndarray, np.ndarray]
+type ValueStateRepr = tuple[jnp.ndarray, jnp.ndarray]
+type PolicyStateRepr = tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
+type BufferItem = tuple[ValueStateRepr, PolicyStateRepr, np.ndarray, np.ndarray]
 
-def format_e(n):
-    a = '%E' % n
-    return a.split('E')[0].rstrip('0').rstrip('.') + 'E' + a.split('E')[1]
 
 class LearningProcess:
-    def __init__(self, run: wandb.Run, save_dir: str, nns: AlphaZeroNNs, no_players: int, batch_size: int = 32,
-                 games_per_training: int = 4, num_simulations: int = 2048, num_worlds: int = 16,
-                 max_buffer_size: int = 1024, c_puct_value: int = 1,
-                 policy_temp: float = 1.0, initial_max_game_length: int = 50,
-                 capped_max_game_length: int = 500, game_length_increment: int = 20):
+    def __init__(
+        self,
+        run: wandb.Run,
+        save_dir: str,
+        nns: AlphaZeroNNs,
+        no_players: int,
+        batch_size: int = 32,
+        games_per_training: int = 4,
+        num_simulations: int = 2048,
+        num_worlds: int = 16,
+        max_buffer_size: int = 1024,
+        c_puct_value: int = 1,
+        policy_temp: float = 1.0,
+        initial_max_game_length: int = 50,
+        capped_max_game_length: int = 500,
+        game_length_increment: int = 20,
+    ):
         self.run = run
         self.save_dir = save_dir
         self.no_players = no_players
@@ -36,55 +49,41 @@ class LearningProcess:
         self.capped_max_game_length = capped_max_game_length
         self.game_length_increment = game_length_increment
 
-        save_path = Path(f"{self.save_dir}/run_{self.run.name}").absolute()
+        save_path = Path(f'{self.save_dir}/run_{self.run.name}').absolute()
         checkpointer = ocp.StandardCheckpointer()
         options = ocp.CheckpointManagerOptions(max_to_keep=2, create=True)
-        self.manager = ocp.CheckpointManager(
-            save_path, checkpointer, options
-        )
+        self.manager = ocp.CheckpointManager(save_path, checkpointer, options)
 
         self.buffer: deque[BufferItem] = deque(maxlen=max_buffer_size)  # buffer of (state_value, state_policy, policy, value) tuples
-        self.mcts = MCTS(
-            networks=nns,
-            num_worlds=num_worlds,
-            num_simulations=num_simulations,
-            c_puct_value=c_puct_value,
-            policy_temp=policy_temp
-        )
+        self.mcts = MCTS(networks=nns, num_worlds=num_worlds, num_simulations=num_simulations, c_puct_value=c_puct_value, policy_temp=policy_temp)
 
     def _increase_max_game_length(self):
         self.max_game_length = max(self.max_game_length + self.game_length_increment, self.capped_max_game_length)
 
     def self_play(self, epochs: int, batch_count: int):
-        epoch_pbar = tqdm(range(epochs), total=epochs, desc="value loss: inf, policy loss: inf")
+        epoch_pbar = tqdm(range(epochs), total=epochs, desc='value loss: inf, policy loss: inf')
 
         for epoch in epoch_pbar:
-            games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc="gameing 😎🎮", leave=False)
+            games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc='gameing 😎🎮', leave=False)
             for _ in games_pbar:
                 self.play_game()
             avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
-            epoch_pbar.set_description(f"value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}")
+            epoch_pbar.set_description(f'value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}')
 
-            self.manager.save(
-                step=epoch,
-                items=self.mcts.networks.get_state(epoch)
-            )
+            self.manager.save(step=epoch, items=self.mcts.networks.get_state(epoch))
 
-            self.run.log(data={
-                "value_loss": avg_value_loss,
-                "policy_loss": avg_policy_loss
-            })
+            self.run.log(data={'value_loss': avg_value_loss, 'policy_loss': avg_policy_loss})
         self._increase_max_game_length()
-        self.manager.close() # TODO: move
+        self.manager.close()  # TODO: move
 
     def play_game(self):
         state = GameState(no_players=self.no_players)
-        pbar = tqdm(range(self.max_game_length), desc="Max game length", leave=False)
+        pbar = tqdm(range(self.max_game_length), desc='Max game length', leave=False)
         for _ in pbar:
             policy_probs, values = self.mcts.run(state)
 
-            value_state = ValueStateProcessor.encode(state) # estimate how the game will end from this state 
-            *policy_state, _ = PolicyStateProcessor.encode(state) # estimate best action to take from this state
+            value_state = ValueStateProcessor.encode(state)  # estimate how the game will end from this state
+            *policy_state, _ = PolicyStateProcessor.encode(state)  # estimate best action to take from this state
             self.buffer.append((value_state, policy_state, policy_probs, values))
             action = np.random.choice(len(policy_probs), p=policy_probs)
             is_end = state.execute_action(action)
@@ -97,7 +96,7 @@ class LearningProcess:
         """
         avg_value_loss = 0.0
         avg_policy_loss = 0.0
-        for batch_num in range(batch_count):
+        for _ in range(batch_count):
             avg_value_loss += self._train_value_step() / batch_count
             avg_policy_loss += self._train_policy_step() / batch_count
         return avg_value_loss, avg_policy_loss
@@ -105,13 +104,11 @@ class LearningProcess:
     def _train_value_step(self) -> float:
         prepared_player_hands, table_states, target_values = self._sample_value_batch()
         value_loss, value_grads = compute_value_loss_and_grad_vect(
-            self.mcts.networks.value_network,
-            self.mcts.networks.value_network_params,
-            prepared_player_hands,
-            table_states,
-            target_values
+            self.mcts.networks.value_network, self.mcts.networks.value_network_params, prepared_player_hands, table_states, target_values
         )
-        updates, self.mcts.networks.value_network_opt_state = self.mcts.networks.value_network_optimizer.update(value_grads, self.mcts.networks.value_network_opt_state)
+        updates, self.mcts.networks.value_network_opt_state = self.mcts.networks.value_network_optimizer.update(
+            value_grads, self.mcts.networks.value_network_opt_state
+        )
         self.mcts.networks.value_network_params = optax.apply_updates(self.mcts.networks.value_network_params, updates)
         return value_loss.item()
 
@@ -123,9 +120,11 @@ class LearningProcess:
             prepared_knowledge,
             table_states,
             encoded_actions,
-            target_policies
+            target_policies,
         )
-        updates, self.mcts.networks.policy_network_opt_state = self.mcts.networks.policy_network_optimizer.update(policy_grads, self.mcts.networks.policy_network_opt_state)
+        updates, self.mcts.networks.policy_network_opt_state = self.mcts.networks.policy_network_optimizer.update(
+            policy_grads, self.mcts.networks.policy_network_opt_state
+        )
         self.mcts.networks.policy_network_params = optax.apply_updates(self.mcts.networks.policy_network_params, updates)
         return policy_loss.item()
 
@@ -133,8 +132,8 @@ class LearningProcess:
         no_samples = min(self.batch_size, len(self.buffer))
         samples_indices = np.random.choice(len(self.buffer), size=no_samples, replace=False)
         sampled = [self.buffer[i] for i in samples_indices]
-        data_to_unpack, _, _, target_values = tuple(map(list, zip(*sampled)))
-        prepared_player_hands, table_states = tuple(map(list, zip(*data_to_unpack)))
+        data_to_unpack, _, _, target_values = tuple(map(list, zip(*sampled, strict=True)))
+        prepared_player_hands, table_states = tuple(map(list, zip(*data_to_unpack, strict=True)))
 
         return jnp.array(prepared_player_hands), jnp.array(table_states), jnp.array(target_values)
 
@@ -143,8 +142,8 @@ class LearningProcess:
         samples_indices = np.random.choice(len(self.buffer), size=no_samples, replace=False)
         sampled = [self.buffer[i] for i in samples_indices]
 
-        _, tuples, target_policies, _ = tuple(map(list, zip(*sampled)))
-        table_states, prepared_knowledge, encoded_actions =  tuple(map(list, zip(*tuples)))
+        _, tuples, target_policies, _ = tuple(map(list, zip(*sampled, strict=True)))
+        table_states, prepared_knowledge, encoded_actions = tuple(map(list, zip(*tuples, strict=True)))
 
         target_policies = [target_policy for _, _, target_policy, _ in sampled]
         return jnp.array(prepared_knowledge), jnp.array(table_states), jnp.array(encoded_actions), jnp.array(target_policies)
