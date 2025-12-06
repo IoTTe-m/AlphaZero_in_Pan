@@ -4,10 +4,10 @@ from pathlib import Path
 import numpy as np
 import optax
 import orbax.checkpoint as ocp
-import wandb
 from jax import numpy as jnp
 from tqdm import tqdm
 
+import wandb
 from src.game_logic import GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
@@ -72,12 +72,9 @@ class LearningProcess:
 
             self.manager.save(step=epoch, items=self.mcts.networks.get_state(epoch))
 
-            self.run.log(data={
-                "value_loss": avg_value_loss,
-                "policy_loss": avg_policy_loss
-            })
+            self.run.log(data={'value_loss': avg_value_loss, 'policy_loss': avg_policy_loss})
             self._increase_max_game_length()
-        self.manager.close() # TODO: move
+        self.manager.close()  # TODO: move
 
     def play_game(self):
         state = GameState(no_players=self.no_players)
