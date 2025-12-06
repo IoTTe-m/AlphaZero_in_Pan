@@ -50,7 +50,7 @@ class GameState:
         return ' '.join(hand)
 
     @staticmethod
-    def decode_card(card_encoding: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def decode_card(card_encoding: np.ndarray) -> tuple[int, int]:
         # [0-5, 6-9]
         # rank, suit
         try:

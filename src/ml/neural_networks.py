@@ -43,7 +43,7 @@ class ValueNetwork(nn.Module):
 @partial(jit, static_argnames=('value_network',))
 def call_value_network(
     value_network: ValueNetwork,
-    value_network_params: optax.Params,
+    value_network_params: dict,
     prepared_player_hands: jnp.ndarray,
     table_state: jnp.ndarray,
 ) -> jnp.ndarray:

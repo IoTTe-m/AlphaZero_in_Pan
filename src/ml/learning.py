@@ -105,28 +105,28 @@ class LearningProcess:
     def _train_value_step(self) -> float:
         prepared_player_hands, table_states, target_values = self._sample_value_batch()
         value_loss, value_grads = compute_value_loss_and_grad_vect(
-            self.mcts.networks.value_network, self.mcts.networks.value_network_params, prepared_player_hands, table_states, target_values
+            self.mcts.networks.value_network.network, self.mcts.networks.value_network.params, prepared_player_hands, table_states, target_values
         )
-        updates, self.mcts.networks.value_network_opt_state = self.mcts.networks.value_network_optimizer.update(
-            value_grads, self.mcts.networks.value_network_opt_state
+        updates, self.mcts.networks.value_network.opt_state = self.mcts.networks.value_network.optimizer.update(
+            value_grads, self.mcts.networks.value_network.opt_state
         )
-        self.mcts.networks.value_network_params = optax.apply_updates(self.mcts.networks.value_network_params, updates)
+        self.mcts.networks.value_network.params = optax.apply_updates(self.mcts.networks.value_network.params, updates)
         return value_loss.item()
 
     def _train_policy_step(self) -> float:
         prepared_knowledge, table_states, encoded_actions, target_policies = self._sample_policy_batch()
         policy_loss, policy_grads = compute_policy_loss_and_grad_vect(
-            self.mcts.networks.policy_network,
-            self.mcts.networks.policy_network_params,
+            self.mcts.networks.policy_network.network,
+            self.mcts.networks.policy_network.params,
             prepared_knowledge,
             table_states,
             encoded_actions,
             target_policies,
         )
-        updates, self.mcts.networks.policy_network_opt_state = self.mcts.networks.policy_network_optimizer.update(
-            policy_grads, self.mcts.networks.policy_network_opt_state
+        updates, self.mcts.networks.policy_network.opt_state = self.mcts.networks.policy_network.optimizer.update(
+            policy_grads, self.mcts.networks.policy_network.opt_state
         )
-        self.mcts.networks.policy_network_params = optax.apply_updates(self.mcts.networks.policy_network_params, updates)
+        self.mcts.networks.policy_network.params = optax.apply_updates(self.mcts.networks.policy_network.params, updates)
         return policy_loss.item()
 
     def _sample_value_batch(self) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
