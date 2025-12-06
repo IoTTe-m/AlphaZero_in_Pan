@@ -58,7 +58,7 @@ class LearningProcess:
         self.mcts = MCTS(networks=nns, num_worlds=num_worlds, num_simulations=num_simulations, c_puct_value=c_puct_value, policy_temp=policy_temp)
 
     def _increase_max_game_length(self):
-        self.max_game_length = max(self.max_game_length + self.game_length_increment, self.capped_max_game_length)
+        self.max_game_length = min(self.max_game_length + self.game_length_increment, self.capped_max_game_length)
 
     def self_play(self, epochs: int, batch_count: int):
         epoch_pbar = tqdm(range(epochs), total=epochs, desc='value loss: inf, policy loss: inf')
@@ -72,9 +72,12 @@ class LearningProcess:
 
             self.manager.save(step=epoch, items=self.mcts.networks.get_state(epoch))
 
-            self.run.log(data={'value_loss': avg_value_loss, 'policy_loss': avg_policy_loss})
-        self._increase_max_game_length()
-        self.manager.close()  # TODO: move
+            self.run.log(data={
+                "value_loss": avg_value_loss,
+                "policy_loss": avg_policy_loss
+            })
+            self._increase_max_game_length()
+        self.manager.close() # TODO: move
 
     def play_game(self):
         state = GameState(no_players=self.no_players)

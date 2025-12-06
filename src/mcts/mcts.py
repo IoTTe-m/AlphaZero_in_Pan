@@ -31,7 +31,7 @@ class McNode:
     def expand(self, az_networks: AlphaZeroNNs, c_puct_value: float):
         *policy_args, actions_list = PolicyStateProcessor.encode(self.state)
 
-        action_probs = call_policy_network(az_networks.policy_network, az_networks.policy_network_params, *policy_args)
+        action_probs = call_policy_network(az_networks.policy_network.network, az_networks.policy_network.params, *policy_args)
 
         for legal_action in actions_list:
             new_state = deepcopy(self.state)
@@ -89,37 +89,48 @@ class MCTS:
                 return np.ones_like(visit_counts) / len(visit_counts)
             return visit_counts_temp / total_counts
 
+    def _evaluate_leaf(self, leaf: McNode, rollout_path: list[tuple[McNode, int]]) -> np.ndarray:
+        if not leaf.is_terminal():
+            leaf.expand(self.networks, self.c_puct_value)
+            value_args = ValueStateProcessor.encode(leaf.state)
+            shifted_values = call_value_network(self.networks.value_network.network, self.networks.value_network.params, *value_args)
+            values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
+
+            values[leaf.state.is_done_array] = 1 / (leaf.state.no_players - 1)
+
+            _, leaf_action = leaf.select_child()
+            rollout_path.append((leaf, leaf_action))
+        else:
+            values = np.ones(leaf.state.no_players) * (1 / (leaf.state.no_players - 1))
+            values[leaf.state.current_player] = -1
+        return values
+
+    def _run_simulation(self, root: McNode) -> np.ndarray:
+        root.visit_count += 1
+        rollout_path, leaf = self.explore(root)
+        values = self._evaluate_leaf(leaf, rollout_path)
+        self.backpropagate(rollout_path, values)
+        return values
+
+    def _run_world(self, game_state: GameState) -> tuple[np.ndarray, np.ndarray]:
+        prepared_game_state = StateProcessor.get_mcts_state(game_state)
+        root = McNode(1.0, prepared_game_state)
+        current_values = np.zeros(game_state.no_players)
+
+        for _ in range(self.num_simulations):
+            values = self._run_simulation(root)
+            current_values += values
+
+        return current_values / self.num_simulations, root.compute_visit_counts()
+
     def run(self, game_state: GameState) -> tuple[np.ndarray, np.ndarray]:
         root_values = np.zeros(game_state.no_players)
         root_actions = np.zeros(ACTION_COUNT)
 
         for _ in range(self.num_worlds):
-            prepared_game_state = StateProcessor.get_mcts_state(game_state)
-            root = McNode(1.0, prepared_game_state)
-            current_values = np.zeros(game_state.no_players)
-            for _ in range(self.num_simulations):
-                root.visit_count += 1
-                rollout_path, leaf = self.explore(root)
-
-                if not leaf.is_terminal():
-                    leaf.expand(self.networks, self.c_puct_value)
-                    value_args = ValueStateProcessor.encode(leaf.state)
-                    shifted_values = call_value_network(self.networks.value_network, self.networks.value_network_params, *value_args)
-                    values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
-
-                    values[leaf.state.is_done_array] = 1 / (leaf.state.no_players - 1)
-
-                    _, leaf_action = leaf.select_child()
-                    rollout_path.append((leaf, leaf_action))
-                else:
-                    values = np.ones(leaf.state.no_players) * (1 / (leaf.state.no_players - 1))
-                    values[leaf.state.current_player] = -1
-
-                self.backpropagate(rollout_path, values)
-                current_values += values
-
-            root_values += current_values / self.num_simulations  # TODO: check if rotation is needed
-            root_actions += root.compute_visit_counts()
+            world_values, world_actions = self._run_world(game_state)
+            root_values += world_values
+            root_actions += world_actions
 
         avg_root_values = root_values / self.num_worlds
         avg_root_actions = root_actions / self.num_worlds

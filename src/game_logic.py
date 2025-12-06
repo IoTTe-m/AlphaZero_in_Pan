@@ -6,6 +6,25 @@ RANKS = ['9', '10', 'J', 'Q', 'K', 'A']
 ranks_to_numbers = {rank: i for i, rank in enumerate(RANKS)}
 ACTION_COUNT = 51
 
+NUM_SUITS = len(SUITS)
+NUM_RANKS = len(RANKS)
+CARD_ENCODING_SIZE = NUM_RANKS + NUM_SUITS
+
+OFFSET_SINGLE_CARD = 0
+COUNT_SINGLE_CARD = NUM_SUITS * NUM_RANKS
+
+OFFSET_THREE_NINES = OFFSET_SINGLE_CARD + COUNT_SINGLE_CARD
+COUNT_THREE_NINES = 3
+
+OFFSET_FOUR_NINES = OFFSET_THREE_NINES + COUNT_THREE_NINES
+COUNT_FOUR_NINES = 3
+
+OFFSET_FOUR_CARDS = OFFSET_FOUR_NINES + COUNT_FOUR_NINES
+COUNT_FOUR_CARDS = (NUM_RANKS - 1) * 4
+
+ACTION_TAKE_CARDS = OFFSET_FOUR_CARDS + COUNT_FOUR_CARDS
+CARDS_TO_TAKE = 3
+
 
 class GameState:
     def __init__(self, no_players: int = 4):
@@ -14,7 +33,7 @@ class GameState:
         self.cards_count = len(suits_to_numbers) * len(ranks_to_numbers)
         self.no_players = no_players
         self.player_hands = -np.ones((len(suits_to_numbers), len(ranks_to_numbers)), dtype=np.int32)
-        self.table_state = np.zeros((self.cards_count, 10), dtype=np.int32)
+        self.table_state = np.zeros((self.cards_count, CARD_ENCODING_SIZE), dtype=np.int32)
         self.current_player = -1
         self.cards_on_table = 0
         self.is_done_array = np.zeros(self.no_players, dtype=np.bool)
@@ -38,7 +57,7 @@ class GameState:
             rank, suit = np.where(np.array(card_encoding) == 1)[0]
         except Exception as e:
             raise ValueError(f'Invalid card encoding: {card_encoding}') from e
-        suit -= 6
+        suit -= NUM_RANKS
         return rank, suit
 
     @staticmethod
@@ -59,7 +78,7 @@ class GameState:
 
     def restart(self):
         self.player_hands = self.prepare_deal()
-        self.table_state = np.zeros((24, 10), dtype=np.int32)
+        self.table_state = np.zeros((self.cards_count, CARD_ENCODING_SIZE), dtype=np.int32)
         self.current_player = self.get_starting_player()
         self.cards_on_table = 0
         self.is_done_array = np.zeros(self.no_players, dtype=np.bool)
@@ -81,69 +100,73 @@ class GameState:
 
     def _play_card(self, rank: int, suit: int):
         self.table_state[self.cards_on_table][rank] = 1
-        self.table_state[self.cards_on_table][6 + suit] = 1
+        self.table_state[self.cards_on_table][NUM_RANKS + suit] = 1
         self.cards_on_table += 1
         self.player_hands[suit][rank] = -1
         self.knowledge_table[:, suit, rank] = -2
+
+    def _play_single_card(self, action: int):
+        rank = (action - OFFSET_SINGLE_CARD) % NUM_RANKS
+        suit = (action - OFFSET_SINGLE_CARD) // NUM_RANKS
+        self._play_card(rank, suit)
+
+    def _play_three_nines(self, action: int):
+        # how many cards from top to reach spade
+        spade_index = action - OFFSET_THREE_NINES
+        card_order = ['D', 'C']
+        card_order.insert(spade_index, 'S')
+        rank = 0
+        for suit in card_order:
+            self._play_card(rank, suits_to_numbers[suit])
+
+    def _play_four_nines(self, action: int):
+        # when playing four 9s, where to put spade
+        spade_index = action - OFFSET_FOUR_NINES + 1
+        card_order = ['H', 'D', 'C']
+        card_order.insert(spade_index, 'S')
+        rank = 0
+        for suit in card_order:
+            self._play_card(rank, suits_to_numbers[suit])
+
+    def _play_four_cards(self, action: int):
+        spade_index = (action - OFFSET_FOUR_CARDS) % len(SUITS)
+        rank = (action - OFFSET_FOUR_CARDS) // len(SUITS) + 1  # because we start from tens !!!
+        card_order = ['H', 'D', 'C']
+        card_order.insert(spade_index, 'S')
+        for suit in card_order:
+            self._play_card(rank, suits_to_numbers[suit])
+
+    def _take_cards(self, player: int):
+        for _ in range(CARDS_TO_TAKE):
+            if self.cards_on_table <= 1:
+                break
+            self.cards_on_table -= 1
+            card_encoding = self.table_state[self.cards_on_table]
+            rank, suit = GameState.decode_card(card_encoding)
+            self.table_state[self.cards_on_table] = np.zeros(CARD_ENCODING_SIZE, dtype=np.int32)
+            self.player_hands[suit][rank] = player
+            self.knowledge_table[:, suit, rank] = player
 
     def execute_action(self, action: int) -> bool:
         # returns True if action results in player victory
         # else returns False
 
-        # action meanings:
-        # 0-23 - play a single card
-        # 24-26 - play three 9s, where 24 means spade goes on the bottom of the stack, 25 means spade goes second from bottom and so on
-        # 27-29 - play four 9s, where 27 means spade goes on the bottom of the stack and so on
-        # 30-33 - play four 10s
-        # 34-37 - play four Js
-        # 38-41 - play four Qs
-        # 42-45 - play four Ks
-        # 46-49 - play four As
-        # 50 - take cards from table
-
         player = self.current_player
 
-        if action < 24:
-            rank = action % 6
-            suit = action // 6
-            self._play_card(rank, suit)
+        if OFFSET_SINGLE_CARD <= action < OFFSET_THREE_NINES:
+            self._play_single_card(action)
 
-        elif action in range(24, 27):
-            # how many cards from top to reach spade
-            spade_index = action - 24
-            card_order = ['D', 'C']
-            card_order.insert(spade_index, 'S')
-            rank = 0
-            for suit in card_order:
-                self._play_card(rank, suits_to_numbers[suit])
+        elif OFFSET_THREE_NINES <= action < OFFSET_FOUR_NINES:
+            self._play_three_nines(action)
 
-        elif action in range(27, 30):
-            # when playing four 9s, where to put spade
-            spade_index = action - 27 + 1
-            card_order = ['H', 'D', 'C']
-            card_order.insert(spade_index, 'S')
-            rank = 0
-            for suit in card_order:
-                self._play_card(rank, suits_to_numbers[suit])
+        elif OFFSET_FOUR_NINES <= action < OFFSET_FOUR_CARDS:
+            self._play_four_nines(action)
 
-        elif action in range(30, 50):
-            spade_index = (action - 30) % 4
-            rank = (action - 30) // 4 + 1  # because we start from tens !!!
-            card_order = ['H', 'D', 'C']
-            card_order.insert(spade_index, 'S')
-            for suit in card_order:
-                self._play_card(rank, suits_to_numbers[suit])
+        elif OFFSET_FOUR_CARDS <= action < ACTION_TAKE_CARDS:
+            self._play_four_cards(action)
 
-        elif action == 50:
-            for _ in range(3):
-                if self.cards_on_table <= 1:
-                    break
-                self.cards_on_table -= 1
-                card_encoding = self.table_state[self.cards_on_table]
-                rank, suit = GameState.decode_card(card_encoding)
-                self.table_state[self.cards_on_table] = np.zeros(10, dtype=np.int32)
-                self.player_hands[suit][rank] = player
-                self.knowledge_table[:, suit, rank] = player
+        elif action == ACTION_TAKE_CARDS:
+            self._take_cards(player)
 
         else:
             raise ValueError('Invalid action')
@@ -160,6 +183,38 @@ class GameState:
             self.current_player = (self.current_player + player_shift) % self.no_players
         return False
 
+    def _get_single_card_actions(self, player: int, table_rank: int) -> list[int]:
+        actions = []
+        for i in range(table_rank, NUM_RANKS):
+            for suit in range(NUM_SUITS):
+                if self.player_hands[suit][i] == player:
+                    actions.append(OFFSET_SINGLE_CARD + suit * NUM_RANKS + i)
+        return actions
+
+    def _get_three_nines_actions(self, table_rank: int, ranks: np.ndarray) -> list[int]:
+        if table_rank == 0 and np.count_nonzero(ranks == 0) == 3:
+            return list(range(OFFSET_THREE_NINES, OFFSET_FOUR_NINES))
+        return []
+
+    def _get_four_nines_actions(self, ranks: np.ndarray) -> list[int]:
+        if np.count_nonzero(ranks == 0) == 4:
+            return list(range(OFFSET_FOUR_NINES, OFFSET_FOUR_CARDS))
+        return []
+
+    def _get_four_cards_actions(self, table_rank: int, ranks: np.ndarray) -> list[int]:
+        actions = []
+        for i in range(table_rank + 1, NUM_RANKS):
+            if np.count_nonzero(ranks == i) == 4:
+                start_action = OFFSET_FOUR_CARDS + (i - 1) * 4
+                end_action = start_action + 4
+                actions.extend(range(start_action, end_action))
+        return actions
+
+    def _get_take_cards_action(self) -> list[int]:
+        if self.cards_on_table > 1:
+            return [ACTION_TAKE_CARDS]
+        return []
+
     def get_possible_actions(self, player: int) -> list[int]:
         actions: list[int] = []
         ranks, suits = self.get_player_hand(player)
@@ -169,34 +224,20 @@ class GameState:
 
         # 9 hearts
         if self.cards_on_table == 0 and ranks[0] == 0 and suits[0] == 0:
-            actions.append(0)
+            actions.append(OFFSET_SINGLE_CARD)
             # four 9s
-            if np.count_nonzero(ranks == 0) == 4:
-                actions += range(27, 30)
+            actions.extend(self._get_four_nines_actions(ranks))
 
         if self.cards_on_table == 0:
             return actions
 
         card_encoding = self.table_state[self.cards_on_table - 1]
-        rank, _ = GameState.decode_card(card_encoding)
+        table_rank, _ = GameState.decode_card(card_encoding)
 
-        # single card play
-        for i in range(rank, 6):
-            for suit in range(4):
-                if self.player_hands[suit][i] == player:
-                    actions += [suit * 6 + i]
-
-        # three nines
-        if rank == 0 and np.count_nonzero(ranks == 0) == 3:
-            actions += range(24, 27)
-
-        # four cards play
-        for i in range(rank + 1, 6):
-            if np.count_nonzero(ranks == i) == 4:
-                actions += range(26 + 4 * i, 30 + 4 * i)
-
-        if self.cards_on_table > 1:
-            actions += [50]
+        actions.extend(self._get_single_card_actions(player, table_rank))
+        actions.extend(self._get_three_nines_actions(table_rank, ranks))
+        actions.extend(self._get_four_cards_actions(table_rank, ranks))
+        actions.extend(self._get_take_cards_action())
 
         return actions
 
