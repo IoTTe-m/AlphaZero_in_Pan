@@ -34,10 +34,8 @@ jobs:
 
       - run: uv sync --group dev
 
-      # Lint
       - name: Ruff lint
         run: uv run ruff check .
 
-      # Format
       - name: Ruff format (check only)
         run: uv run ruff format --check .
