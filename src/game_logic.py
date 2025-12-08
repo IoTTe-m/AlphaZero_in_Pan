@@ -29,7 +29,7 @@ CARDS_TO_TAKE = 3
 class GameState:
     def __init__(self, no_players: int = 4):
         assert no_players in [2, 3, 4], 'Number of players should be equal to 2, 3 or 4'
-
+        # TODO: not all of them need to be public
         self.cards_count = len(suits_to_numbers) * len(ranks_to_numbers)
         self.no_players = no_players
         self.player_hands = -np.ones((len(suits_to_numbers), len(ranks_to_numbers)), dtype=np.int32)
@@ -42,7 +42,7 @@ class GameState:
         self.restart()
 
     @staticmethod
-    def print_hand(ranks: np.ndarray, suits: np.ndarray) -> str:
+    def hand_representation(ranks: np.ndarray, suits: np.ndarray) -> str:
         suit_symbols = ['♥', '♦', '♣', '♠']
         hand: list[str] = []
         for i in range(len(suits)):
@@ -115,18 +115,16 @@ class GameState:
         spade_index = action - OFFSET_THREE_NINES
         card_order = ['D', 'C']
         card_order.insert(spade_index, 'S')
-        rank = 0
         for suit in card_order:
-            self._play_card(rank, suits_to_numbers[suit])
+            self._play_card(0, suits_to_numbers[suit])
 
     def _play_four_nines(self, action: int):
         # when playing four 9s, where to put spade
         spade_index = action - OFFSET_FOUR_NINES + 1
         card_order = ['H', 'D', 'C']
         card_order.insert(spade_index, 'S')
-        rank = 0
         for suit in card_order:
-            self._play_card(rank, suits_to_numbers[suit])
+            self._play_card(0, suits_to_numbers[suit])
 
     def _play_four_cards(self, action: int):
         spade_index = (action - OFFSET_FOUR_CARDS) % len(SUITS)
@@ -152,7 +150,7 @@ class GameState:
         # else returns False
 
         player = self.current_player
-
+        # TODO fix naming
         if OFFSET_SINGLE_CARD <= action < OFFSET_THREE_NINES:
             self._play_single_card(action)
 

@@ -216,3 +216,6 @@ class AlphaZeroNNs:
                 'opt_state': self.policy_network.opt_state,
             },
         }
+
+
+# TODO: decompose policy  and other long files

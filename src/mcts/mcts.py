@@ -74,16 +74,15 @@ class MCTS:
     # rób rollout aż do liścia
     # policz value (jeżeli przegrany/wygrany, to znamy wartość, w przeciwnym wypadku użyj value network)
     # propaguj value w górę drzewa i zwiększ nagrodę gracza, który gra aktualnie w danym stanie
-
     @staticmethod
-    def compute_action_probs(visit_counts: np.ndarray, temp: float) -> np.ndarray:
-        if temp == 0:
+    def compute_action_probs(visit_counts: np.ndarray, temperature: float) -> np.ndarray:
+        if temperature == 0:
             best_action = np.argmax(visit_counts)
             action_probs = np.zeros_like(visit_counts)
             action_probs[best_action] = 1.0
             return action_probs
         else:
-            visit_counts_temp = visit_counts ** (1 / temp)  # TODO: check if correct, maybe softmax?
+            visit_counts_temp = visit_counts ** (1 / temperature)  # TODO: check if correct, maybe softmax?
             total_counts = np.sum(visit_counts_temp)
             if total_counts == 0:
                 return np.ones_like(visit_counts) / len(visit_counts)
