@@ -3,6 +3,7 @@ import numpy as np
 SUITS = ['H', 'D', 'C', 'S']
 suits_to_numbers = {suit: i for i, suit in enumerate(SUITS)}
 RANKS = ['9', '10', 'J', 'Q', 'K', 'A']
+SUIT_SYMBOLS = ['♥', '♦', '♣', '♠']
 ranks_to_numbers = {rank: i for i, rank in enumerate(RANKS)}
 ACTION_COUNT = 51
 
@@ -43,10 +44,9 @@ class GameState:
 
     @staticmethod
     def hand_representation(ranks: np.ndarray, suits: np.ndarray) -> str:
-        suit_symbols = ['♥', '♦', '♣', '♠']
         hand: list[str] = []
         for i in range(len(suits)):
-            hand += [f'{suit_symbols[suits[i]]}{RANKS[ranks[i]]}']
+            hand += [f'{SUIT_SYMBOLS[suits[i]]}{RANKS[ranks[i]]}']
         return ' '.join(hand)
 
     @staticmethod
@@ -174,7 +174,7 @@ class GameState:
             if np.sum(self.is_done_array) == self.no_players - 1:
                 return True
 
-        player_shift = -1 if self.table_state[self.cards_on_table - 1][suits_to_numbers['S']] == 1 else 1
+        player_shift = -1 if self.table_state[self.cards_on_table - 1][NUM_RANKS + suits_to_numbers['S']] == 1 else 1
 
         self.current_player = (self.current_player + player_shift) % self.no_players
         while self.is_done_array[self.current_player]:
