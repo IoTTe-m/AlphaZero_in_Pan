@@ -63,18 +63,22 @@ class LearningProcess:
     def self_play(self, epochs: int, batch_count: int):
         epoch_pbar = tqdm(range(epochs), total=epochs, desc='value loss: inf, policy loss: inf')
 
-        for epoch in epoch_pbar:
-            games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc='gameing 😎🎮', leave=False)
-            for _ in games_pbar:
-                self.play_game()
-            avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
-            epoch_pbar.set_description(f'value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}')
+        try:
+            for epoch in epoch_pbar:
+                games_pbar = tqdm(range(self.games_per_training), total=self.games_per_training, desc='gameing 😎🎮', leave=False)
+                for _ in games_pbar:
+                    self.play_game()
+                avg_value_loss, avg_policy_loss = self.train_networks(batch_count)
+                epoch_pbar.set_description(f'value loss: {avg_value_loss:.2e}, policy loss: {avg_policy_loss:.2e}')
 
-            self.manager.save(step=epoch, items=self.mcts.networks.get_state(epoch))
+                self.manager.save(step=epoch, items=self.mcts.networks.get_state(epoch))
 
-            self.run.log(data={'value_loss': avg_value_loss, 'policy_loss': avg_policy_loss})
-            self._increase_max_game_length()
-        self.manager.close()  # TODO: move
+                self.run.log(data={'value_loss': avg_value_loss, 'policy_loss': avg_policy_loss})
+                self._increase_max_game_length()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.manager.close()
 
     def play_game(self):
         state = GameState(no_players=self.no_players)
