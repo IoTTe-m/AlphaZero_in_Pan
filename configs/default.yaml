@@ -14,7 +14,7 @@ policy_temp: 0.2
 
 max_buffer_size: 1024
 
-initial_max_game_length: 30
+initial_max_game_length: 100
 capped_max_game_length: 500
 game_length_increment: 10
 

@@ -152,5 +152,7 @@ class MCTS:
         for node, action in reversed(path):
             child = node.children[action]
             child.visit_count += 1
+            # Credit child with the value for the player who took the action (parent's player)
+            # This way Q(s,a) = expected value of action a for the player who takes it
             child.value_sum += values[node.state.current_player]
             node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self.c_puct_value)

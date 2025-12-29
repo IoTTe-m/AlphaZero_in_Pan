@@ -8,7 +8,7 @@ from jax import numpy as jnp
 from tqdm import tqdm
 
 import wandb
-from src.game_logic import GameState
+from src.game_logic import OFFSET_SINGLE_CARD, GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
 from src.ml.neural_networks import AlphaZeroNNs
@@ -78,19 +78,61 @@ class LearningProcess:
         finally:
             self.manager.close()
 
-    def play_game(self):
+    def _create_random_game_state(self) -> GameState:
+        """Create a game state with random starting conditions for curriculum learning."""
         state = GameState(no_players=self.no_players)
-        # Store (value_state, policy_state, policy_probs, current_player) for each step
+
+        # 50% chance to start with 9♥ already played (skips the forced first move)
+        if np.random.random() < 0.5:
+            state.execute_action(OFFSET_SINGLE_CARD)  # Play 9♥
+
+        # 30% chance to remove one player's cards (simulate 3-player game)
+        # 10% chance to remove two players' cards (simulate 2-player game)
+        if self.no_players == 4:
+            roll = np.random.random()
+            if roll < 0.25:
+                # Remove 2 players (keep current player and one other)
+                players_to_remove = [p for p in range(self.no_players) if p != state.current_player]
+                np.random.shuffle(players_to_remove)
+                for p in players_to_remove[:2]:
+                    self._remove_player_cards(state, p)
+            elif roll < 0.5:
+                # Remove 1 player
+                players_to_remove = [p for p in range(self.no_players) if p != state.current_player]
+                p = np.random.choice(players_to_remove)
+                self._remove_player_cards(state, p)
+
+        return state
+
+    def _remove_player_cards(self, state: GameState, player: int):
+        """Remove all cards from a player and mark them as done."""
+        # Find all cards owned by this player and redistribute to others
+        active_players = [p for p in range(state.no_players) if p != player and not state.is_done_array[p]]
+        if not active_players:
+            return
+
+        for suit in range(state.player_hands.shape[0]):
+            for rank in range(state.player_hands.shape[1]):
+                if state.player_hands[suit][rank] == player:
+                    # Give card to a random active player
+                    new_owner = np.random.choice(active_players)
+                    state.player_hands[suit][rank] = new_owner
+                    # Update knowledge table
+                    state.knowledge_table[:, suit, rank] = new_owner
+
+        state.is_done_array[player] = True
+
+    def play_game(self):
+        state = self._create_random_game_state()
+
         game_trajectory: list[tuple[ValueStateRepr, PolicyStateRepr, np.ndarray, int]] = []
 
         pbar = tqdm(range(self.max_game_length), desc='Max game length', leave=False)
         for _ in pbar:
             policy_probs, _ = self.mcts.run(state)
 
-            value_state = ValueStateProcessor.encode(state)  # estimate how the game will end from this state
-            # estimate best action to take from this state
+            value_state = ValueStateProcessor.encode(state)
             prepared_knowledge_policy, table_state_policy, encoded_action_policy, _ = PolicyStateProcessor.encode(state)
-            # Store current_player so we can shift the outcome to match the encoded perspective
             game_trajectory.append(
                 (value_state, (prepared_knowledge_policy, table_state_policy, encoded_action_policy), policy_probs, state.current_player)
             )
@@ -100,16 +142,18 @@ class LearningProcess:
             if is_end:
                 break
 
-        # Compute actual game outcome in absolute player order: winners get +1/(n-1), loser gets -1
-        # In Pan, the last player with cards loses
-        game_outcome = np.ones(self.no_players) * (1.0 / (self.no_players - 1))  # Winners share +1
+        # Compute actual game outcome: winners get +1/(n-1), loser gets -1
+        game_outcome = np.ones(self.no_players) * (1.0 / max(1, self.no_players - 1))
         loser = np.where(~state.is_done_array)[0]
         if len(loser) > 0:
             game_outcome[loser[0]] = -1.0
+        # Players who were removed at start (have no cards and are done) get 0
+        for p in range(self.no_players):
+            if state.is_done_array[p] and len(state.get_player_hand(p)[0]) == 0:
+                game_outcome[p] = 0.0
 
-        # Add all states from this game to the buffer with perspective-shifted game outcome
+        # Add all states from this game to the buffer
         for value_state, policy_state, policy_probs, current_player in game_trajectory:
-            # Shift outcome so index 0 = current_player (matching the encoded state perspective)
             shifted_outcome = np.roll(game_outcome, -current_player)
             self.buffer.append((value_state, policy_state, policy_probs, shifted_outcome))
 
