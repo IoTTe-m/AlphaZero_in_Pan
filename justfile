@@ -13,8 +13,14 @@ play config="configs/play.yaml":
 test:
     uv run pytest
 
-fmt:
-    uv run ruff format .
+coverage:
+    uv run pytest --cov --cov-report=term-missing
+
+coverage-html:
+    uv run pytest --cov --cov-report=term-missing --cov-report=html
+
+fmt args="":
+    uv run ruff format {{args}} .
 
 lint:
     uv run ruff check --fix .
@@ -22,7 +28,7 @@ lint:
 typecheck:
     uv run pyright .
 
-check: fmt lint typecheck test
+check: (fmt "--check") lint typecheck test
 
 lock:
     uv lock

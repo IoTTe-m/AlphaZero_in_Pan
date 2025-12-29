@@ -49,3 +49,15 @@ ignore = []
 quote-style = "single"
 indent-style = "space"
 line-ending = "lf"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "**/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0
