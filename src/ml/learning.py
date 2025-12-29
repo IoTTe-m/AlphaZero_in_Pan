@@ -54,7 +54,6 @@ class LearningProcess:
         num_worlds: int = 16,
         max_buffer_size: int = 1024,
         c_puct_value: float = 1.0,
-        c_puct_value: float = 1.0,
         policy_temp: float = 1.0,
         initial_max_game_length: int = 50,
         capped_max_game_length: int = 500,
