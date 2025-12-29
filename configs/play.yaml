@@ -1,0 +1,14 @@
+checkpoint_path: "checkpoints/run_spring-snowflake-86/24"
+
+num_simulations: 64
+num_worlds: 4
+c_puct_value: 1.0
+policy_temp: 0.0  # Greedy play for AI
+
+player_count: 4
+human_player: 0
+
+card_images_dir: "card_images/"
+
+window_width: 1200
+window_height: 800

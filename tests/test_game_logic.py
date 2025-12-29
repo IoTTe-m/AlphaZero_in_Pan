@@ -173,6 +173,39 @@ class TestGameState:
         assert game.player_hands[SUIT_H][RANK_9] == -1
         assert game.table_state[0][RANK_9] == 1
 
+    def test_cannot_take_cards_at_start(self, game: GameState) -> None:
+        # Given a game that just started (no cards on table)
+        assert game.cards_on_table == 0
+        player = game.get_starting_player()
+
+        # When getting possible actions
+        actions = game.get_possible_actions(player)
+
+        # Then taking cards should NOT be an option
+        assert ACTION_TAKE_CARDS not in actions
+
+    def test_cannot_take_cards_with_only_one_card_on_table(self, game: GameState) -> None:
+        # Given a table with only one card (the 9 of Hearts)
+        player = game.get_starting_player()
+        game.current_player = player
+
+        # Play the starting 9H
+        game.execute_action(OFFSET_SINGLE_CARD)
+        assert game.cards_on_table == 1
+
+        # Set next player (after playing non-spade, turn goes to next player)
+        next_player = game.current_player
+        
+        # Give this player some cards to play
+        game.player_hands = -np.ones((4, 6), dtype=np.int32)
+        self.setup_hand(game, next_player, [(RANK_10, SUIT_H), (RANK_A, SUIT_S)])
+
+        # When getting possible actions
+        actions = game.get_possible_actions(next_player)
+
+        # Then taking cards should NOT be an option (must leave at least 1 card)
+        assert ACTION_TAKE_CARDS not in actions
+
     def test_game_end_all_but_one(self, game: GameState) -> None:
         # Given a player with one card left and 2 other players done (1 active opponent)
         player = game.current_player

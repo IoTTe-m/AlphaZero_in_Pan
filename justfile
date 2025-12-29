@@ -4,8 +4,11 @@ default:
 install:
     uv sync
 
-run config="configs/default.yaml":
+train config="configs/default.yaml":
     uv run --group ml main.py --config {{config}}
+
+play config="configs/play.yaml":
+    uv run --group ml play.py --config {{config}}
 
 test:
     uv run pytest
