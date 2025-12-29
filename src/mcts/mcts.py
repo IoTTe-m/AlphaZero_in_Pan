@@ -4,7 +4,9 @@ import numpy as np
 
 from src.game_logic import ACTION_COUNT, GameState
 from src.mcts.state_processors import PolicyStateProcessor, StateProcessor, ValueStateProcessor
-from src.ml.neural_networks import AlphaZeroNNs, call_policy_network, call_value_network
+from src.ml.neural_networks import AlphaZeroNNs
+from src.ml.policy_net import call_policy_network
+from src.ml.value_net import call_value_network
 
 
 class McNode:
@@ -56,7 +58,7 @@ class McNode:
 
 
 class MCTS:
-    def __init__(self, networks: AlphaZeroNNs, num_worlds: int, num_simulations: int, c_puct_value: int = 1, policy_temp: float = 1.0):
+    def __init__(self, networks: AlphaZeroNNs, num_worlds: int, num_simulations: int, c_puct_value: float = 1.0, policy_temp: float = 1.0):
         self.networks = networks
         self.num_worlds = num_worlds
         self.num_simulations = num_simulations

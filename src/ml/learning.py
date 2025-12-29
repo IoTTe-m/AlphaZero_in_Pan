@@ -4,18 +4,16 @@ from pathlib import Path
 import numpy as np
 import optax
 import orbax.checkpoint as ocp
-import wandb
 from jax import numpy as jnp
 from tqdm import tqdm
 
+import wandb
 from src.game_logic import GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
-from src.ml.neural_networks import (
-    AlphaZeroNNs,
-    compute_policy_loss_and_grad_vect,
-    compute_value_loss_and_grad_vect,
-)
+from src.ml.neural_networks import AlphaZeroNNs
+from src.ml.policy_net import compute_policy_loss_and_grad_vect
+from src.ml.value_net import compute_value_loss_and_grad_vect
 
 type ValueStateRepr = tuple[jnp.ndarray, jnp.ndarray]
 type PolicyStateRepr = tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
@@ -34,7 +32,7 @@ class LearningProcess:
         num_simulations: int = 2048,
         num_worlds: int = 16,
         max_buffer_size: int = 1024,
-        c_puct_value: int = 1,
+        c_puct_value: float = 1.0,
         policy_temp: float = 1.0,
         initial_max_game_length: int = 50,
         capped_max_game_length: int = 500,
@@ -132,7 +130,7 @@ class LearningProcess:
             self.mcts.networks.value_network.network, self.mcts.networks.value_network.params, prepared_player_hands, table_states, target_values
         )
         updates, self.mcts.networks.value_network.opt_state = self.mcts.networks.value_network.optimizer.update(
-            value_grads, self.mcts.networks.value_network.opt_state
+            value_grads, self.mcts.networks.value_network.opt_state, self.mcts.networks.value_network.params
         )
         self.mcts.networks.value_network.params = optax.apply_updates(self.mcts.networks.value_network.params, updates)
         return value_loss.item()
@@ -148,7 +146,7 @@ class LearningProcess:
             target_policies,
         )
         updates, self.mcts.networks.policy_network.opt_state = self.mcts.networks.policy_network.optimizer.update(
-            policy_grads, self.mcts.networks.policy_network.opt_state
+            policy_grads, self.mcts.networks.policy_network.opt_state, self.mcts.networks.policy_network.params
         )
         self.mcts.networks.policy_network.params = optax.apply_updates(self.mcts.networks.policy_network.params, updates)
         return policy_loss.item()

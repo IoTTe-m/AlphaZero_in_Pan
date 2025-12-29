@@ -401,6 +401,7 @@ class TestGameState:
         max_steps = 1000
         steps = 0
 
+        is_over = False
         while steps < max_steps:
             player = game.current_player
             actions = game.get_possible_actions(player)

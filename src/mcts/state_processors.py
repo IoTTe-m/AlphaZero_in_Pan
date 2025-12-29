@@ -46,7 +46,7 @@ class StateProcessor:
     @staticmethod
     def encode_actions(actions_list: list[int]) -> np.ndarray:
         # actions array ([0, 3, 23]) -> encoded array ([1,0,0,1,0...]
-        encoded_actions = np.zeros((ACTION_COUNT,))
+        encoded_actions = np.zeros((ACTION_COUNT,), dtype=np.bool_)
         encoded_actions[actions_list] = 1
         return encoded_actions
 

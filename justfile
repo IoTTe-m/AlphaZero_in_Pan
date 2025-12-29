@@ -4,8 +4,8 @@ default:
 install:
     uv sync
 
-run:
-    uv run main.py
+run config="configs/default.yaml":
+    uv run --group ml main.py --config {{config}}
 
 test:
     uv run pytest
@@ -14,7 +14,7 @@ fmt:
     uv run ruff format .
 
 lint:
-    uv run ruff check .
+    uv run ruff check --fix .
 
 typecheck:
     uv run pyright .
