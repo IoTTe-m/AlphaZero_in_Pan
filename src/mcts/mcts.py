@@ -35,8 +35,7 @@ class McNode:
 
         for legal_action in actions_list:
             new_state = deepcopy(self.state)
-            # is_win_state = new_state.execute_action(legal_action)
-            # TODO: verify
+            new_state.execute_action(legal_action)
             child = McNode(prior=float(action_probs[legal_action]), state=new_state)
             self.children[legal_action] = child
             self.uct_scores[legal_action] = McNode.puct_score(self, child, c_puct_value)
@@ -88,7 +87,7 @@ class MCTS:
                 return np.ones_like(visit_counts) / len(visit_counts)
             return visit_counts_temp / total_counts
 
-    def _evaluate_leaf(self, leaf: McNode, rollout_path: list[tuple[McNode, int]]) -> np.ndarray:
+    def _evaluate_leaf(self, leaf: McNode) -> np.ndarray:
         if not leaf.is_terminal():
             leaf.expand(self.networks, self.c_puct_value)
             value_args = ValueStateProcessor.encode(leaf.state)
@@ -96,9 +95,6 @@ class MCTS:
             values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
 
             values[leaf.state.is_done_array] = 1 / (leaf.state.no_players - 1)
-
-            _, leaf_action = leaf.select_child()
-            rollout_path.append((leaf, leaf_action))
         else:
             values = np.ones(leaf.state.no_players) * (1 / (leaf.state.no_players - 1))
             values[leaf.state.current_player] = -1
@@ -107,8 +103,8 @@ class MCTS:
     def _run_simulation(self, root: McNode) -> np.ndarray:
         root.visit_count += 1
         rollout_path, leaf = self.explore(root)
-        values = self._evaluate_leaf(leaf, rollout_path)
-        self.backpropagate(rollout_path, values)
+        values = self._evaluate_leaf(leaf)
+        self.backpropagate(rollout_path, leaf, values)
         return values
 
     def _run_world(self, game_state: GameState) -> tuple[np.ndarray, np.ndarray]:
@@ -145,7 +141,12 @@ class MCTS:
             node = new_node
         return path, node
 
-    def backpropagate(self, path: list[tuple[McNode, int]], values: np.ndarray):
+    def backpropagate(self, path: list[tuple[McNode, int]], leaf: McNode, values: np.ndarray):
+        # Update the leaf node (it was expanded but not yet credited)
+        leaf.visit_count += 1
+        # Note: leaf.value_sum is not updated as it has no parent action leading to it in the path
+        
+        # Update all nodes on the path from leaf back to root
         for node, action in reversed(path):
             child = node.children[action]
             child.visit_count += 1
