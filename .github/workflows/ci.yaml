@@ -34,8 +34,10 @@ jobs:
 
       - run: uv sync --group dev
 
-      - name: Ruff lint
-        run: uv run ruff check .
+      - name: Install Just
+        uses: taiki-e/install-action@just
 
-      - name: Ruff format (check only)
-        run: uv run ruff format --check .
+      - run: just lint
+      - run: just fmt --check .
+      - run: just test
+      - run: just coverage
