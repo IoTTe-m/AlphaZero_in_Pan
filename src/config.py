@@ -7,13 +7,6 @@ from pydantic import BaseModel
 
 
 class WandbConfig(BaseModel):
-    """Weights & Biases logging configuration.
-
-    Attributes:
-        entity: W&B entity (team or username).
-        project: W&B project name.
-    """
-
     entity: str = 'reinforced-annealer'
     project: str = 'pan-alpha-zero'
 
