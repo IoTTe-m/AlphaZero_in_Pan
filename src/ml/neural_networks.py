@@ -5,13 +5,9 @@ from flax import linen as nn
 
 from src.ml.policy_net import (
     PolicyNetwork,
-    call_policy_network,
-    compute_policy_loss_and_grad_vect,
 )
 from src.ml.value_net import (
     ValueNetwork,
-    call_value_network,
-    compute_value_loss_and_grad_vect,
 )
 
 

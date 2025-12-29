@@ -4,10 +4,10 @@ from pathlib import Path
 import numpy as np
 import optax
 import orbax.checkpoint as ocp
+import wandb
 from jax import numpy as jnp
 from tqdm import tqdm
 
-import wandb
 from src.game_logic import GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
@@ -84,7 +84,7 @@ class LearningProcess:
         state = GameState(no_players=self.no_players)
         # Store (value_state, policy_state, policy_probs, current_player) for each step
         game_trajectory: list[tuple[ValueStateRepr, PolicyStateRepr, np.ndarray, int]] = []
-        
+
         pbar = tqdm(range(self.max_game_length), desc='Max game length', leave=False)
         for _ in pbar:
             policy_probs, _ = self.mcts.run(state)
@@ -93,20 +93,22 @@ class LearningProcess:
             # estimate best action to take from this state
             prepared_knowledge_policy, table_state_policy, encoded_action_policy, _ = PolicyStateProcessor.encode(state)
             # Store current_player so we can shift the outcome to match the encoded perspective
-            game_trajectory.append((value_state, (prepared_knowledge_policy, table_state_policy, encoded_action_policy), policy_probs, state.current_player))
-            
+            game_trajectory.append(
+                (value_state, (prepared_knowledge_policy, table_state_policy, encoded_action_policy), policy_probs, state.current_player)
+            )
+
             action = np.random.choice(len(policy_probs), p=policy_probs)
             is_end = state.execute_action(action)
             if is_end:
                 break
-        
+
         # Compute actual game outcome in absolute player order: winners get +1/(n-1), loser gets -1
         # In Pan, the last player with cards loses
         game_outcome = np.ones(self.no_players) * (1.0 / (self.no_players - 1))  # Winners share +1
         loser = np.where(~state.is_done_array)[0]
         if len(loser) > 0:
             game_outcome[loser[0]] = -1.0
-        
+
         # Add all states from this game to the buffer with perspective-shifted game outcome
         for value_state, policy_state, policy_probs, current_player in game_trajectory:
             # Shift outcome so index 0 = current_player (matching the encoded state perspective)

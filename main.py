@@ -1,8 +1,8 @@
 import jax
 import jax.numpy as jnp
 import optax
-
 import wandb
+
 from src.game_logic import ACTION_COUNT, RANKS, SUITS
 from src.ml.learning import LearningProcess
 from src.ml.neural_networks import AlphaZeroNNs, PolicyNetwork, ValueNetwork

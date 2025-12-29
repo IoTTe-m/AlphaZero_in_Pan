@@ -145,7 +145,7 @@ class MCTS:
         # Update the leaf node (it was expanded but not yet credited)
         leaf.visit_count += 1
         # Note: leaf.value_sum is not updated as it has no parent action leading to it in the path
-        
+
         # Update all nodes on the path from leaf back to root
         for node, action in reversed(path):
             child = node.children[action]
