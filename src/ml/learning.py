@@ -142,15 +142,9 @@ class LearningProcess:
             if is_end:
                 break
 
-        # Compute actual game outcome: winners get +1/(n-1), loser gets -1
+        # Compute actual game outcome: winners get +1/(n-1), losers get -1
         game_outcome = np.ones(self.no_players) * (1.0 / max(1, self.no_players - 1))
-        loser = np.where(~state.is_done_array)[0]
-        if len(loser) > 0:
-            game_outcome[loser[0]] = -1.0
-        # Players who were removed at start (have no cards and are done) get 0
-        for p in range(self.no_players):
-            if state.is_done_array[p] and len(state.get_player_hand(p)[0]) == 0:
-                game_outcome[p] = 0.0
+        game_outcome[~state.is_done_array] = -1.0
 
         # Add all states from this game to the buffer
         for value_state, policy_state, policy_probs, current_player in game_trajectory:
