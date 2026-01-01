@@ -54,6 +54,19 @@ def call_policy_network(
     return jnp.array(policy_network.apply(policy_network_params, prepared_knowledge, table_state, actions_mask))
 
 
+@partial(jit, static_argnames=('policy_network',))
+def call_policy_network_batched(
+    policy_network: PolicyNetwork,
+    policy_network_params: dict,
+    prepared_knowledge: jnp.ndarray,
+    table_state: jnp.ndarray,
+    actions_mask: jnp.ndarray,
+) -> jnp.ndarray:
+    return vmap(call_policy_network, in_axes=(None, None, 0, 0, 0))(
+        policy_network, policy_network_params, prepared_knowledge, table_state, actions_mask
+    )
+
+
 def compute_policy_loss(
     policy_network: PolicyNetwork,
     params: dict,

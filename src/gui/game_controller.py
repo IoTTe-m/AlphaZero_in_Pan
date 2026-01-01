@@ -63,16 +63,20 @@ class GameController:
         checkpointer = ocp.StandardCheckpointer()
         options = ocp.CheckpointManagerOptions(create=False)
         manager = ocp.CheckpointManager(checkpoint_path.parent.absolute(), checkpointer, options)
-        
+
         step = int(checkpoint_path.name)
         restored = manager.restore(
             step,
-            args=ocp.args.StandardRestore({
-                'step': 0,
-                'value': {'params': value_network_params, 'opt_state': opt_state_value},
-                'policy': {'params': policy_network_params, 'opt_state': opt_state_policy},
-            }),
+            args=ocp.args.StandardRestore(
+                item={  # type: ignore
+                    'step': 0,
+                    'value': {'params': value_network_params, 'opt_state': opt_state_value},
+                    'policy': {'params': policy_network_params, 'opt_state': opt_state_policy},
+                }
+            ),
         )
+
+        manager.close()
 
         return AlphaZeroNNs(
             value_network=value_network,
@@ -92,7 +96,7 @@ class GameController:
         return self.state.current_player == self.human_player
 
     def is_game_over(self) -> bool:
-        return np.sum(self.state.is_done_array) >= self.state.no_players - 1
+        return bool(np.sum(self.state.is_done_array) >= self.state.no_players - 1)
 
     def get_loser(self) -> int | None:
         if not self.is_game_over():

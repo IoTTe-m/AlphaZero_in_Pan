@@ -6,8 +6,8 @@ batch_count: 8
 epochs: 100
 
 games_per_training: 1
-num_simulations: 32
-num_worlds: 4
+num_simulations: 128
+num_worlds: 8
 
 c_puct_value: 1.0
 policy_temp: 0.2

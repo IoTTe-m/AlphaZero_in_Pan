@@ -195,7 +195,7 @@ class TestGameState:
 
         # Set next player (after playing non-spade, turn goes to next player)
         next_player = game.current_player
-        
+
         # Give this player some cards to play
         game.player_hands = -np.ones((4, 6), dtype=np.int32)
         self.setup_hand(game, next_player, [(RANK_10, SUIT_H), (RANK_A, SUIT_S)])

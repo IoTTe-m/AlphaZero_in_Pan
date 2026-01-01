@@ -330,6 +330,7 @@ class PanGameApp:
         card_back = self.card_renderer.get_card_back()
         small_width = 50
         small_height = 75
+        card_back_small = None
 
         if card_back:
             card_back_small = pygame.transform.scale(card_back, (small_width, small_height))
@@ -348,7 +349,7 @@ class PanGameApp:
             total_width = min(card_count * 25, 200)
             start_x = x - total_width // 2
             for i in range(card_count):
-                if card_back:
+                if card_back_small:
                     self.screen.blit(card_back_small, (start_x + i * 25, y))
         else:
             # Vertical layout for left/right players
@@ -365,7 +366,7 @@ class PanGameApp:
             total_height = min(card_count * 20, 150)
             start_y = y - total_height // 2
             for i in range(card_count):
-                if card_back:
+                if card_back_small:
                     self.screen.blit(card_back_small, (card_x, start_y + i * 20))
 
     def _draw_human_hand(self):

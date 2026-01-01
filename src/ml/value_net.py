@@ -49,6 +49,16 @@ def call_value_network(
     return jnp.array(value_network.apply(value_network_params, prepared_player_hands, table_state))
 
 
+@partial(jit, static_argnames=('value_network',))
+def call_value_network_batched(
+    value_network: ValueNetwork,
+    value_network_params: dict,
+    prepared_player_hands: jnp.ndarray,
+    table_state: jnp.ndarray,
+) -> jnp.ndarray:
+    return vmap(call_value_network, in_axes=(None, None, 0, 0))(value_network, value_network_params, prepared_player_hands, table_state)
+
+
 def compute_value_loss(
     value_network: ValueNetwork,
     params: optax.Params,
