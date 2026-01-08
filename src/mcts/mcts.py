@@ -88,72 +88,39 @@ class MCTS:
             action_probs[best_action] = 1.0
             return action_probs
         else:
-            visit_counts_temp = visit_counts ** (1 / temperature)
+            visit_counts_temp = visit_counts ** (1 / temperature)  # TODO: check if correct, maybe softmax?
             total_counts = np.sum(visit_counts_temp)
             if total_counts == 0:
                 return np.ones_like(visit_counts) / len(visit_counts)
             return visit_counts_temp / total_counts
 
     def _run_batched_simulations(self, roots: list[McNode]) -> list[np.ndarray]:
-        # Store accumulated values for each world to mimic original behavior
-        # world_idx -> accumulated_values (no_players,)
         accumulated_values = [np.zeros(roots[0].state.no_players) for _ in roots]
 
         for _ in range(self.num_simulations):
             # 1. Selection Phase (CPU)
-            leaves = self._select_leaves(roots)
-
-            # 2. Batch Preparation Phase
-            (
-                prepared_knowledge_batch,
-                table_state_batch_policy,
-                actions_mask_batch,
-                prepared_player_hands_batch,
-                table_state_batch_value,
-                expansion_contexts,
-            ) = self._prepare_batch(leaves)
-
-            # 3. Inference Phase (GPU)
-            policy_outputs, value_outputs = self._run_inference(
-                prepared_knowledge_batch,
-                table_state_batch_policy,
-                actions_mask_batch,
-                prepared_player_hands_batch,
-                table_state_batch_value,
-            )
-
-            # 4. Expansion & Backpropagation Phase
-            self._backpropagate_batch(leaves, policy_outputs, value_outputs, expansion_contexts, accumulated_values)
-
-        return accumulated_values
-
-    def _select_leaves(self, roots: list[McNode]) -> list[MctsSearchState]:
-        leaves: list[MctsSearchState] = []
-        for world_idx, root in enumerate(roots):
-            root.visit_count += 1
-            path, leaf = self.explore(root)
-            leaves.append(MctsSearchState(world_idx=world_idx, leaf=leaf, path=path))
-        return leaves
+            # Find a leaf node for every world
+            leaves: list[MctsSearchState] = []
+            for world_idx, root in enumerate(roots):
+                root.visit_count += 1
+                path, leaf = self.explore(root)
+                leaves.append(MctsSearchState(world_idx=world_idx, leaf=leaf, path=path))
 
     def _prepare_batch(
         self, leaves: list[MctsSearchState]
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, dict[int, list[int]]]:
         expansion_contexts = {}  # world_idx -> (actions_list)
 
-        # Batch containers
         batch_prepared_knowledge = []
         batch_table_state_policy = []
         batch_actions_mask = []
         batch_prepared_player_hands = []
         batch_table_state_value = []
 
-        # We strictly enforce batch size = num_worlds by iterating over the leaves list
-        # which is guaranteed to be size num_worlds
         for search_state in leaves:
             world_idx = search_state.world_idx
             leaf = search_state.leaf
 
-            # Encode state for batch (even if terminal, to keep shapes constant)
             prepared_knowledge, table_state, actions_mask, actions_list = PolicyStateProcessor.encode(leaf.state)
             prepared_player_hands, table_state_value = ValueStateProcessor.encode(leaf.state)
 
@@ -166,7 +133,6 @@ class MCTS:
             if not leaf.is_terminal():
                 expansion_contexts[world_idx] = actions_list
 
-        # Convert to JAX arrays
         prepared_knowledge_batch = jnp.stack(batch_prepared_knowledge)
         table_state_batch_policy = jnp.stack(batch_table_state_policy)
         actions_mask_batch = jnp.stack(batch_actions_mask)
@@ -281,15 +247,11 @@ class MCTS:
         return path, node
 
     def backpropagate(self, path: list[tuple[McNode, int]], leaf: McNode, values: np.ndarray):
-        # Update the leaf node (it was expanded but not yet credited)
         leaf.visit_count += 1
-        # Note: leaf.value_sum is not updated as it has no parent action leading to it in the path
 
-        # Update all nodes on the path from leaf back to root
         for node, action in reversed(path):
             child = node.children[action]
             child.visit_count += 1
-            # Credit child with the value for the player who took the action (parent's player)
-            # This way Q(s,a) = expected value of action a for the player who takes it
+            # Q(s,a) = expected value for the player who took action a
             child.value_sum += values[node.state.current_player]
             node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self.c_puct_value)
