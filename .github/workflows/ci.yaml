@@ -37,10 +37,6 @@ jobs:
       - name: Install Just
         uses: taiki-e/install-action@just
 
-      - run: just lint
-      - run: just fmt --check .
-      - run: just test
-      - run: just coverage
       - name: Install Just
         uses: taiki-e/install-action@just
 

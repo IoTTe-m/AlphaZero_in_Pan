@@ -58,6 +58,9 @@ ml = [
 requires-dist = [
     { name = "numpy", specifier = ">=2.3.3" },
     { name = "orbax", specifier = ">=0.1.9" },
+    { name = "pydantic", specifier = ">=2.12.5" },
+    { name = "pygame", specifier = ">=2.6.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "wandb", specifier = ">=0.22.2" },
 ]
