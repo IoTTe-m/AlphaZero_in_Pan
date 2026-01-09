@@ -27,11 +27,21 @@ class McNode:
             state: Game state at this node.
         """
         self.visit_count = 0
-        self.prior = prior
+        self._prior = prior
         self.value_sum = 0
         self.children: dict[int, McNode] = {}
-        self.state: GameState = state
+        self._state: GameState = state
         self.uct_scores = -np.ones((ACTION_COUNT,)) * np.inf
+
+    @property
+    def prior(self) -> float:
+        """Prior probability from policy network (read-only)."""
+        return self._prior
+
+    @property
+    def state(self) -> GameState:
+        """Game state at this node (read-only reference)."""
+        return self._state
 
     @staticmethod
     def puct_score(parent: 'McNode', child: 'McNode', c_puct_value: float) -> float:
@@ -124,10 +134,30 @@ class MCTS:
             policy_temp: Temperature for action probability scaling.
         """
         self.networks = networks
-        self._num_worlds = num_worlds
-        self._num_simulations = num_simulations
-        self._c_puct_value = c_puct_value
-        self._policy_temp = policy_temp
+        self.__num_worlds = num_worlds
+        self.__num_simulations = num_simulations
+        self.__c_puct_value = c_puct_value
+        self.__policy_temp = policy_temp
+
+    @property
+    def num_worlds(self) -> int:
+        """Number of parallel search trees (read-only)."""
+        return self.__num_worlds
+
+    @property
+    def num_simulations(self) -> int:
+        """Number of simulations per move (read-only)."""
+        return self.__num_simulations
+
+    @property
+    def c_puct_value(self) -> float:
+        """PUCT exploration constant (read-only)."""
+        return self.__c_puct_value
+
+    @property
+    def policy_temp(self) -> float:
+        """Temperature for action probability scaling (read-only)."""
+        return self.__policy_temp
 
     @staticmethod
     def compute_action_probs(visit_counts: np.ndarray, temperature: float) -> np.ndarray:
@@ -157,7 +187,7 @@ class MCTS:
         """Run multiple MCTS simulations in batched mode for efficiency."""
         accumulated_values = [np.zeros(roots[0].state.no_players) for _ in roots]
 
-        for _ in range(self._num_simulations):
+        for _ in range(self.__num_simulations):
             # 1. Selection Phase
             leaves: list[MctsSearchState] = []
             for world_idx, root in enumerate(roots):
@@ -282,7 +312,7 @@ class MCTS:
                 actions_list = expansion_contexts[world_idx]
 
                 # Expand
-                leaf.expand(np.array(priors), actions_list, self._c_puct_value)
+                leaf.expand(np.array(priors), actions_list, self.__c_puct_value)
 
                 # Value
                 shifted_values = value_outputs[i]
@@ -307,7 +337,7 @@ class MCTS:
             Tuple of (action probabilities, value estimates per player).
         """
         roots = []
-        for _ in range(self._num_worlds):
+        for _ in range(self.__num_worlds):
             prepared_game_state = StateProcessor.get_mcts_state(game_state)
             roots.append(McNode(ROOT_PRIOR, prepared_game_state))
 
@@ -322,14 +352,14 @@ class MCTS:
             visit_counts = root.compute_visit_counts()
 
             # Average values for this specific world
-            world_values = accumulated_values[i] / self._num_simulations
+            world_values = accumulated_values[i] / self.__num_simulations
 
             total_root_values += world_values
             total_root_actions += visit_counts
 
-        avg_root_values = total_root_values / self._num_worlds
-        avg_root_actions = total_root_actions / self._num_worlds
-        action_probs = self.compute_action_probs(avg_root_actions, self._policy_temp)
+        avg_root_values = total_root_values / self.__num_worlds
+        avg_root_actions = total_root_actions / self.__num_worlds
+        action_probs = self.compute_action_probs(avg_root_actions, self.__policy_temp)
         return action_probs, avg_root_values
 
     def explore(self, root: McNode) -> tuple[list[tuple[McNode, int]], McNode]:
@@ -365,4 +395,4 @@ class MCTS:
             child = node.children[action]
             child.visit_count += 1
             child.value_sum += values[node.state.current_player]
-            node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self._c_puct_value)
+            node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self.__c_puct_value)

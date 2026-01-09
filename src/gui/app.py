@@ -1,4 +1,6 @@
 import argparse
+import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -56,9 +58,12 @@ class PanGameApp:
         self.ai_thinking = False
         self.ai_action: int | None = None
         self.ai_player: int | None = None
+        self._shutdown = False
 
     def _compute_ai_action_async(self, player: int):
         action = self.controller.get_ai_action()
+        if self._shutdown:
+            return
         self.ai_action = action
         self.ai_player = player
         self.ai_thinking = False
@@ -96,7 +101,9 @@ class PanGameApp:
             pygame.display.flip()
             clock.tick(60)
 
+        self._shutdown = True
         pygame.quit()
+        os._exit(0)
 
     def _handle_click(self, pos: tuple[int, int]):
         # Check restart button

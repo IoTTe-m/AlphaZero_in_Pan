@@ -50,16 +50,26 @@ class GameState:
             no_players: Number of players (2, 3, or 4).
         """
         assert no_players in [2, 3, 4], 'Number of players should be equal to 2, 3 or 4'
-        self.cards_count = len(SUITS_TO_NUMBERS) * len(RANKS_TO_NUMBERS)
-        self.no_players = no_players
+        self._cards_count = len(SUITS_TO_NUMBERS) * len(RANKS_TO_NUMBERS)
+        self._no_players = no_players
         self.player_hands = CARD_UNKNOWN * np.ones((len(SUITS_TO_NUMBERS), len(RANKS_TO_NUMBERS)), dtype=np.int32)
-        self.table_state = np.zeros((self.cards_count, CARD_ENCODING_SIZE), dtype=np.int32)
+        self.table_state = np.zeros((self._cards_count, CARD_ENCODING_SIZE), dtype=np.int32)
         self.current_player = -1
         self.cards_on_table = 0
-        self.is_done_array = np.zeros(self.no_players, dtype=np.bool)
-        self.knowledge_table = CARD_UNKNOWN * np.ones((self.no_players, len(SUITS_TO_NUMBERS), len(RANKS_TO_NUMBERS)), dtype=np.int32)
+        self.is_done_array = np.zeros(self._no_players, dtype=np.bool)
+        self.knowledge_table = CARD_UNKNOWN * np.ones((self._no_players, len(SUITS_TO_NUMBERS), len(RANKS_TO_NUMBERS)), dtype=np.int32)
 
         self.restart()
+
+    @property
+    def no_players(self) -> int:
+        """Number of players in the game (read-only)."""
+        return self._no_players
+
+    @property
+    def cards_count(self) -> int:
+        """Total number of cards in the deck (read-only)."""
+        return self._cards_count
 
     @staticmethod
     def hand_representation(ranks: np.ndarray, suits: np.ndarray) -> str:
@@ -117,8 +127,8 @@ class GameState:
         Returns:
             2D array (suits x ranks) with player indices.
         """
-        cards_per_player = self.cards_count // self.no_players
-        cards = np.repeat(np.arange(0, self.no_players, dtype=np.int32), cards_per_player)
+        cards_per_player = self._cards_count // self._no_players
+        cards = np.repeat(np.arange(0, self._no_players, dtype=np.int32), cards_per_player)
         np.random.shuffle(cards)
         cards = np.reshape(cards, (len(SUITS_TO_NUMBERS), -1))
         return cards
@@ -126,16 +136,16 @@ class GameState:
     def restart(self) -> None:
         """Reset the game to initial state with a new random deal."""
         self.player_hands = self.prepare_deal()
-        self.table_state = np.zeros((self.cards_count, CARD_ENCODING_SIZE), dtype=np.int32)
+        self.table_state = np.zeros((self._cards_count, CARD_ENCODING_SIZE), dtype=np.int32)
         self.current_player = self.get_starting_player()
         self.cards_on_table = 0
-        self.is_done_array = np.zeros(self.no_players, dtype=np.bool)
-        self.knowledge_table = CARD_UNKNOWN * np.ones((self.no_players, len(SUITS_TO_NUMBERS), len(RANKS_TO_NUMBERS)), dtype=np.int32)
-        GameState.fill_knowledge_table(self.knowledge_table, self.player_hands, self.no_players)
+        self.is_done_array = np.zeros(self._no_players, dtype=np.bool)
+        self.knowledge_table = CARD_UNKNOWN * np.ones((self._no_players, len(SUITS_TO_NUMBERS), len(RANKS_TO_NUMBERS)), dtype=np.int32)
+        GameState.fill_knowledge_table(self.knowledge_table, self.player_hands, self._no_players)
 
     def print_table(self) -> None:
         """Print each player's hand for debugging."""
-        for player in range(self.no_players):
+        for player in range(self._no_players):
             self.get_player_hand(player)
 
     def get_player_hand(self, player: int) -> tuple[np.ndarray, np.ndarray]:
