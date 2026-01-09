@@ -4,8 +4,11 @@ default:
 install:
     uv sync
 
-run:
-    uv run main.py
+train config="configs/default.yaml":
+    uv run --group ml main.py --config {{config}}
+
+play config="configs/play.yaml":
+    uv run --group ml play.py --config {{config}}
 
 test:
     uv run pytest
@@ -20,7 +23,7 @@ fmt args="":
     uv run ruff format {{args}} .
 
 lint:
-    uv run ruff check .
+    uv run ruff check --fix .
 
 typecheck:
     uv run pyright .

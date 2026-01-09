@@ -1,51 +1,102 @@
+"""Monte Carlo Tree Search implementation with neural network guidance.
+
+This module provides batched MCTS for efficient parallel search across
+multiple game worlds, guided by policy and value neural networks.
+"""
+
 from copy import deepcopy
+from dataclasses import dataclass
 
 import numpy as np
+from jax import numpy as jnp
 
 from src.game_logic import ACTION_COUNT, GameState
 from src.mcts.state_processors import PolicyStateProcessor, StateProcessor, ValueStateProcessor
-from src.ml.neural_networks import AlphaZeroNNs, call_policy_network, call_value_network
+from src.ml.neural_networks import AlphaZeroNNs
+from src.ml.policy_net import call_policy_network_batched
+from src.ml.value_net import call_value_network_batched
+
+# MCTS constants
+ROOT_PRIOR = 1.0
+LOSER_VALUE = -1.0
 
 
 class McNode:
-    def __init__(self, prior: float, state: GameState):
+    """A node in the Monte Carlo Tree Search tree."""
+
+    def __init__(self, prior: float, state: GameState) -> None:
+        """
+        Initialize a node with prior probability and game state.
+
+        Args:
+            prior: Prior probability from policy network.
+            state: Game state at this node.
+        """
         self.visit_count = 0
-        self.prior = prior
+        self._prior = prior
         self.value_sum = 0
-        self.children = {}
-        self.state: GameState = state
+        self.children: dict[int, McNode] = {}
+        self._state: GameState = state
         self.uct_scores = -np.ones((ACTION_COUNT,)) * np.inf
+
+    @property
+    def prior(self) -> float:
+        """Prior probability from policy network (read-only)."""
+        return self._prior
+
+    @property
+    def state(self) -> GameState:
+        """Game state at this node (read-only reference)."""
+        return self._state
 
     @staticmethod
     def puct_score(parent: 'McNode', child: 'McNode', c_puct_value: float) -> float:
-        u_value = c_puct_value * child.prior * np.sqrt(parent.visit_count + 1) / (child.visit_count + 1)  # TODO: verify
+        """
+        Calculate the PUCT score for child selection.
+
+        Args:
+            parent: Parent node.
+            child: Child node to score.
+            c_puct_value: Exploration constant.
+
+        Returns:
+            PUCT score combining exploration and exploitation.
+        """
+        u_value = c_puct_value * child.prior * np.sqrt(parent.visit_count + 1) / (child.visit_count + 1)
         q_value = child.value_sum / child.visit_count if child.visit_count > 0 else 0
         return u_value + q_value
 
-    def expanded(self):
+    def expanded(self) -> bool:
+        """Check if this node has been expanded (has children)."""
         return len(self.children) > 0
 
-    def is_terminal(self):
+    def is_terminal(self) -> bool:
+        """Check if this node represents a terminal game state."""
         return sum(self.state.is_done_array) >= self.state.no_players - 1
 
-    def expand(self, az_networks: AlphaZeroNNs, c_puct_value: float):
-        *policy_args, actions_list = PolicyStateProcessor.encode(self.state)
+    def expand(self, action_probs: np.ndarray, actions_list: list[int], c_puct_value: float) -> None:
+        """
+        Expand this node by creating children for all legal actions.
 
-        action_probs = call_policy_network(az_networks.policy_network.network, az_networks.policy_network.params, *policy_args)
-
+        Args:
+            action_probs: Action probability distribution from policy network.
+            actions_list: List of legal action indices.
+            c_puct_value: Exploration constant for UCT scoring.
+        """
         for legal_action in actions_list:
             new_state = deepcopy(self.state)
-            # is_win_state = new_state.execute_action(legal_action)
-            # TODO: verify
+            new_state.execute_action(legal_action)
             child = McNode(prior=float(action_probs[legal_action]), state=new_state)
             self.children[legal_action] = child
             self.uct_scores[legal_action] = McNode.puct_score(self, child, c_puct_value)
 
     def select_child(self) -> tuple['McNode', int]:
+        """Select the child with the highest UCT score."""
         action_index = int(np.argmax(self.uct_scores))
         return self.children[action_index], action_index
 
     def compute_visit_counts(self) -> np.ndarray:
+        """Return visit counts for each action as an array."""
         visits = [(action, child.visit_count) for action, child in self.children.items()]
         visit_counts = np.zeros((ACTION_COUNT,))
         for action, count in visits:
@@ -53,29 +104,79 @@ class McNode:
         return visit_counts
 
     def is_player_finished(self, player_number: int) -> bool:
+        """
+        Check if the specified player has finished the game.
+
+        Args:
+            player_number: Player index to check.
+
+        Returns:
+            True if player has finished.
+        """
         return self.state.is_done_array[player_number]
 
 
-class MCTS:
-    def __init__(self, networks: AlphaZeroNNs, num_worlds: int, num_simulations: int, c_puct_value: int = 1, policy_temp: float = 1.0):
-        self.networks = networks
-        self.num_worlds = num_worlds
-        self.num_simulations = num_simulations
-        self.c_puct_value = c_puct_value
-        self.policy_temp = policy_temp
+@dataclass
+class MctsSearchState:
+    """Tracks the state of a single MCTS search path during batched simulation."""
 
-    # ROLLOUT:
-    # zwiększ ilość odwiedzeń node'a o 1
-    # wylistuj akcje
-    # jeżeli jesteś w liściu, to odpal policy network
-    # zapisz odpowiedź sieci
-    # wybierz losową akcję przy pomocy śmiesznego wzorku (odpowiedź sieci + jakieś rzeczy przeróżne)
-    # rozszerz drzewo przeszukiwań
-    # rób rollout aż do liścia
-    # policz value (jeżeli przegrany/wygrany, to znamy wartość, w przeciwnym wypadku użyj value network)
-    # propaguj value w górę drzewa i zwiększ nagrodę gracza, który gra aktualnie w danym stanie
+    world_idx: int
+    leaf: McNode
+    path: list[tuple[McNode, int]]
+
+
+class MCTS:
+    """Monte Carlo Tree Search implementation with neural network guidance."""
+
+    def __init__(self, networks: AlphaZeroNNs, num_worlds: int, num_simulations: int, c_puct_value: float = 1.0, policy_temp: float = 1.0) -> None:
+        """
+        Initialize MCTS with neural networks and search parameters.
+
+        Args:
+            networks: Neural networks for policy and value estimation.
+            num_worlds: Number of parallel search trees for variance reduction.
+            num_simulations: Number of simulations per move.
+            c_puct_value: Exploration constant for PUCT formula.
+            policy_temp: Temperature for action probability scaling.
+        """
+        self.networks = networks
+        self.__num_worlds = num_worlds
+        self.__num_simulations = num_simulations
+        self.__c_puct_value = c_puct_value
+        self.__policy_temp = policy_temp
+
+    @property
+    def num_worlds(self) -> int:
+        """Number of parallel search trees (read-only)."""
+        return self.__num_worlds
+
+    @property
+    def num_simulations(self) -> int:
+        """Number of simulations per move (read-only)."""
+        return self.__num_simulations
+
+    @property
+    def c_puct_value(self) -> float:
+        """PUCT exploration constant (read-only)."""
+        return self.__c_puct_value
+
+    @property
+    def policy_temp(self) -> float:
+        """Temperature for action probability scaling (read-only)."""
+        return self.__policy_temp
+
     @staticmethod
     def compute_action_probs(visit_counts: np.ndarray, temperature: float) -> np.ndarray:
+        """
+        Convert visit counts to action probabilities using temperature scaling.
+
+        Args:
+            visit_counts: Array of visit counts per action.
+            temperature: Temperature parameter (0 = greedy, higher = more random).
+
+        Returns:
+            Normalized action probability distribution.
+        """
         if temperature == 0:
             best_action = np.argmax(visit_counts)
             action_probs = np.zeros_like(visit_counts)
@@ -88,55 +189,195 @@ class MCTS:
                 return np.ones_like(visit_counts) / len(visit_counts)
             return visit_counts_temp / total_counts
 
-    def _evaluate_leaf(self, leaf: McNode, rollout_path: list[tuple[McNode, int]]) -> np.ndarray:
-        if not leaf.is_terminal():
-            leaf.expand(self.networks, self.c_puct_value)
-            value_args = ValueStateProcessor.encode(leaf.state)
-            shifted_values = call_value_network(self.networks.value_network.network, self.networks.value_network.params, *value_args)
-            values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
+    def _run_batched_simulations(self, roots: list[McNode]) -> list[np.ndarray]:
+        """Run multiple MCTS simulations in batched mode for efficiency."""
+        accumulated_values = [np.zeros(roots[0].state.no_players) for _ in roots]
 
-            values[leaf.state.is_done_array] = 1 / (leaf.state.no_players - 1)
+        for _ in range(self.__num_simulations):
+            # 1. Selection Phase
+            leaves: list[MctsSearchState] = []
+            for world_idx, root in enumerate(roots):
+                root.visit_count += 1
+                path, leaf = self.explore(root)
+                leaves.append(MctsSearchState(world_idx=world_idx, leaf=leaf, path=path))
 
-            _, leaf_action = leaf.select_child()
-            rollout_path.append((leaf, leaf_action))
-        else:
-            values = np.ones(leaf.state.no_players) * (1 / (leaf.state.no_players - 1))
-            values[leaf.state.current_player] = -1
-        return values
+            # 2. Batch Preparation
+            (
+                prepared_knowledge_batch,
+                table_state_batch_policy,
+                actions_mask_batch,
+                prepared_player_hands_batch,
+                table_state_batch_value,
+                expansion_contexts,
+            ) = self._prepare_batch(leaves)
 
-    def _run_simulation(self, root: McNode) -> np.ndarray:
-        root.visit_count += 1
-        rollout_path, leaf = self.explore(root)
-        values = self._evaluate_leaf(leaf, rollout_path)
-        self.backpropagate(rollout_path, values)
-        return values
+            # 3. Inference
+            policy_outputs, value_outputs = self._run_inference(
+                prepared_knowledge_batch,
+                table_state_batch_policy,
+                actions_mask_batch,
+                prepared_player_hands_batch,
+                table_state_batch_value,
+            )
 
-    def _run_world(self, game_state: GameState) -> tuple[np.ndarray, np.ndarray]:
-        prepared_game_state = StateProcessor.get_mcts_state(game_state)
-        root = McNode(1.0, prepared_game_state)
-        current_values = np.zeros(game_state.no_players)
+            # 4. Expansion & Backpropagation
+            self._backpropagate_batch(leaves, policy_outputs, value_outputs, expansion_contexts, accumulated_values)
 
-        for _ in range(self.num_simulations):
-            values = self._run_simulation(root)
-            current_values += values
+        return accumulated_values
 
-        return current_values / self.num_simulations, root.compute_visit_counts()
+    def _prepare_batch(
+        self, leaves: list[MctsSearchState]
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, dict[int, list[int]]]:
+        """Prepare batched inputs for neural network inference."""
+        expansion_contexts = {}  # world_idx -> (actions_list)
+
+        batch_prepared_knowledge = []
+        batch_table_state_policy = []
+        batch_actions_mask = []
+        batch_prepared_player_hands = []
+        batch_table_state_value = []
+
+        for search_state in leaves:
+            world_idx = search_state.world_idx
+            leaf = search_state.leaf
+
+            prepared_knowledge, table_state, actions_mask, actions_list = PolicyStateProcessor.encode(leaf.state)
+            prepared_player_hands, table_state_value = ValueStateProcessor.encode(leaf.state)
+
+            batch_prepared_knowledge.append(prepared_knowledge)
+            batch_table_state_policy.append(table_state)
+            batch_actions_mask.append(actions_mask)
+            batch_prepared_player_hands.append(prepared_player_hands)
+            batch_table_state_value.append(table_state_value)
+
+            if not leaf.is_terminal():
+                expansion_contexts[world_idx] = actions_list
+
+        prepared_knowledge_batch = jnp.stack(batch_prepared_knowledge)
+        table_state_batch_policy = jnp.stack(batch_table_state_policy)
+        actions_mask_batch = jnp.stack(batch_actions_mask)
+
+        prepared_player_hands_batch = jnp.stack(batch_prepared_player_hands)
+        table_state_batch_value = jnp.stack(batch_table_state_value)
+
+        return (
+            prepared_knowledge_batch,
+            table_state_batch_policy,
+            actions_mask_batch,
+            prepared_player_hands_batch,
+            table_state_batch_value,
+            expansion_contexts,
+        )
+
+    def _run_inference(
+        self,
+        prepared_knowledge_batch: jnp.ndarray,
+        table_state_batch_policy: jnp.ndarray,
+        actions_mask_batch: jnp.ndarray,
+        prepared_player_hands_batch: jnp.ndarray,
+        table_state_batch_value: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Run policy and value networks on batched inputs."""
+        policy_outputs = call_policy_network_batched(
+            self.networks.policy_network.network,
+            self.networks.policy_network.params,
+            prepared_knowledge_batch,
+            table_state_batch_policy,
+            actions_mask_batch,
+        )
+
+        value_outputs = call_value_network_batched(
+            self.networks.value_network.network,
+            self.networks.value_network.params,
+            prepared_player_hands_batch,
+            table_state_batch_value,
+        )
+        return policy_outputs, value_outputs
+
+    def _backpropagate_batch(
+        self,
+        leaves: list[MctsSearchState],
+        policy_outputs: jnp.ndarray,
+        value_outputs: jnp.ndarray,
+        expansion_contexts: dict[int, list[int]],
+        accumulated_values: list[np.ndarray],
+    ) -> None:
+        """Expand leaves and backpropagate values through the tree."""
+        for i, search_state in enumerate(leaves):
+            world_idx = search_state.world_idx
+            leaf = search_state.leaf
+            path = search_state.path
+
+            if leaf.is_terminal():
+                winner_value = 1.0 / (leaf.state.no_players - 1)
+                values = np.ones(leaf.state.no_players) * winner_value
+                values[leaf.state.current_player] = LOSER_VALUE
+            else:
+                # NN evaluation
+                priors = policy_outputs[i]
+                actions_list = expansion_contexts[world_idx]
+
+                # Expand
+                leaf.expand(np.array(priors), actions_list, self.__c_puct_value)
+
+                # Value
+                shifted_values = value_outputs[i]
+                values = ValueStateProcessor.decode(shifted_values, leaf.state.current_player)
+                winner_value = 1.0 / (leaf.state.no_players - 1)
+                values[leaf.state.is_done_array] = winner_value
+
+            # Accumulate values for this simulation step
+            accumulated_values[world_idx] += values
+
+            # Backpropagate
+            self.backpropagate(path, leaf, values)
 
     def run(self, game_state: GameState) -> tuple[np.ndarray, np.ndarray]:
-        root_values = np.zeros(game_state.no_players)
-        root_actions = np.zeros(ACTION_COUNT)
+        """
+        Run MCTS from the given state.
 
-        for _ in range(self.num_worlds):
-            world_values, world_actions = self._run_world(game_state)
-            root_values += world_values
-            root_actions += world_actions
+        Args:
+            game_state: Current game state to search from.
 
-        avg_root_values = root_values / self.num_worlds
-        avg_root_actions = root_actions / self.num_worlds
-        action_probs = self.compute_action_probs(avg_root_actions, self.policy_temp)
+        Returns:
+            Tuple of (action probabilities, value estimates per player).
+        """
+        roots = []
+        for _ in range(self.__num_worlds):
+            prepared_game_state = StateProcessor.get_mcts_state(game_state)
+            roots.append(McNode(ROOT_PRIOR, prepared_game_state))
+
+        # Run batched simulations
+        accumulated_values = self._run_batched_simulations(roots)
+
+        # Aggregate results across worlds
+        total_root_values = np.zeros(game_state.no_players)
+        total_root_actions = np.zeros(ACTION_COUNT)
+
+        for i, root in enumerate(roots):
+            visit_counts = root.compute_visit_counts()
+
+            # Average values for this specific world
+            world_values = accumulated_values[i] / self.__num_simulations
+
+            total_root_values += world_values
+            total_root_actions += visit_counts
+
+        avg_root_values = total_root_values / self.__num_worlds
+        avg_root_actions = total_root_actions / self.__num_worlds
+        action_probs = self.compute_action_probs(avg_root_actions, self.__policy_temp)
         return action_probs, avg_root_values
 
     def explore(self, root: McNode) -> tuple[list[tuple[McNode, int]], McNode]:
+        """
+        Traverse the tree from root to a leaf node.
+
+        Args:
+            root: Root node to start traversal from.
+
+        Returns:
+            Tuple of (path of (node, action) pairs, leaf node).
+        """
         node = root
         path = []
         while node.expanded():
@@ -145,9 +386,19 @@ class MCTS:
             node = new_node
         return path, node
 
-    def backpropagate(self, path: list[tuple[McNode, int]], values: np.ndarray):
+    def backpropagate(self, path: list[tuple[McNode, int]], leaf: McNode, values: np.ndarray) -> None:
+        """
+        Update visit counts and value sums along the path from leaf to root.
+
+        Args:
+            path: List of (node, action) pairs from root to leaf.
+            leaf: Leaf node where evaluation occurred.
+            values: Value estimates for each player.
+        """
+        leaf.visit_count += 1
+
         for node, action in reversed(path):
             child = node.children[action]
             child.visit_count += 1
             child.value_sum += values[node.state.current_player]
-            node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self.c_puct_value)
+            node.uct_scores[action] = McNode.puct_score(node, child, c_puct_value=self.__c_puct_value)
