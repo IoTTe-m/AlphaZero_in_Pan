@@ -1,3 +1,9 @@
+"""State encoding and transformation utilities for MCTS and neural networks.
+
+Provides processors for converting game states into neural network inputs
+and handling perspective shifts between players.
+"""
+
 from copy import deepcopy
 
 import numpy as np

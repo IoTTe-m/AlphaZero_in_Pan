@@ -1,3 +1,9 @@
+"""Value network for game state evaluation.
+
+Defines the neural network architecture and loss functions for predicting
+player outcomes from game states.
+"""
+
 from functools import partial
 
 import optax

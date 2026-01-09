@@ -1,6 +1,7 @@
+"""Main GUI application for playing Pan against AlphaZero AI."""
+
 import argparse
 import os
-import sys
 import threading
 import time
 from pathlib import Path
@@ -33,7 +34,36 @@ LIGHT_BLUE = (173, 216, 230)
 
 
 class PanGameApp:
+    """Pygame-based GUI application for playing Pan against AlphaZero AI.
+
+    Handles rendering the game board, processing user input, and coordinating
+    with the AI through asynchronous MCTS computation.
+
+    Attributes:
+        config: Game and display configuration.
+        controller: Game logic and AI controller.
+        card_renderer: Handles card image loading and rendering.
+        screen: Pygame display surface.
+        font: Main font for text rendering.
+        small_font: Smaller font for messages.
+        selected_cards: Currently selected cards for multi-card actions.
+        card_rects: Clickable regions for player's cards.
+        take_button_rect: Clickable region for take cards button.
+        restart_button_rect: Clickable region for restart button.
+        message: Current status message to display.
+        message_time: Timestamp when message was set.
+        ai_delay: Delay before AI moves in seconds.
+        ai_thinking: Whether AI is currently computing.
+        ai_action: Computed AI action waiting to be applied.
+        ai_player: Player index for pending AI action.
+    """
+
     def __init__(self, config: PlayConfig):
+        """Initialize the game application.
+
+        Args:
+            config: Configuration for the game and display.
+        """
         self.config = config
         self.controller = GameController(config)
         self.card_renderer = CardRenderer(config.card_images_dir)
@@ -60,7 +90,12 @@ class PanGameApp:
         self.ai_player: int | None = None
         self._shutdown = False
 
-    def _compute_ai_action_async(self, player: int):
+    def _compute_ai_action_async(self, player: int) -> None:
+        """Compute AI action in a background thread.
+
+        Args:
+            player: Player index for which to compute the action.
+        """
         action = self.controller.get_ai_action()
         if self._shutdown:
             return
@@ -68,7 +103,8 @@ class PanGameApp:
         self.ai_player = player
         self.ai_thinking = False
 
-    def run(self):
+    def run(self) -> None:
+        """Run the main game loop until the window is closed."""
         clock = pygame.time.Clock()
         running = True
         last_ai_move_time = 0.0
@@ -105,7 +141,12 @@ class PanGameApp:
         pygame.quit()
         os._exit(0)
 
-    def _handle_click(self, pos: tuple[int, int]):
+    def _handle_click(self, pos: tuple[int, int]) -> None:
+        """Handle mouse click events.
+
+        Args:
+            pos: Mouse position (x, y) of the click.
+        """
         # Check restart button
         if self.restart_button_rect and self.restart_button_rect.collidepoint(pos):
             self.controller.restart()
@@ -133,7 +174,13 @@ class PanGameApp:
                 self._handle_card_click(rank, suit)
                 return
 
-    def _handle_card_click(self, rank: int, suit: int):
+    def _handle_card_click(self, rank: int, suit: int) -> None:
+        """Handle a click on a card in the player's hand.
+
+        Args:
+            rank: Card rank index.
+            suit: Card suit index.
+        """
         legal_actions = self.controller.get_human_actions()
 
         # Check if this card can be part of a multi-card action
@@ -169,7 +216,16 @@ class PanGameApp:
         self._set_message('Cannot play this card')
 
     def _get_multi_card_actions_for_card(self, rank: int, suit: int, legal_actions: list[int]) -> list[int]:
-        """Get multi-card actions that include this card."""
+        """Get multi-card actions that include this card.
+
+        Args:
+            rank: Card rank index.
+            suit: Card suit index.
+            legal_actions: List of currently legal action IDs.
+
+        Returns:
+            List of multi-card action IDs that involve this card.
+        """
         multi_actions = []
 
         # Check three nines (only for 9s, suits D/C/S - not H which starts)
@@ -195,7 +251,14 @@ class PanGameApp:
         return multi_actions
 
     def _try_match_selection_to_action(self, legal_actions: list[int]) -> int | None:
-        """Check if current selection matches any multi-card action."""
+        """Check if current card selection matches any multi-card action.
+
+        Args:
+            legal_actions: List of currently legal action IDs.
+
+        Returns:
+            Matching action ID, or None if no match.
+        """
         if len(self.selected_cards) < 3:
             return None
 
@@ -234,7 +297,8 @@ class PanGameApp:
 
         return None
 
-    def _start_ai_turn(self):
+    def _start_ai_turn(self) -> None:
+        """Start computing AI action in a background thread."""
         player = self.controller.get_current_player()
         if self.controller.is_player_done(player):
             return
@@ -244,7 +308,8 @@ class PanGameApp:
         thread = threading.Thread(target=self._compute_ai_action_async, args=(player,), daemon=True)
         thread.start()
 
-    def _apply_ai_action(self):
+    def _apply_ai_action(self) -> None:
+        """Apply the computed AI action to the game state."""
         action = self.ai_action
         player = self.ai_player
         self.ai_action = None
@@ -262,11 +327,17 @@ class PanGameApp:
             card_names = ' '.join(f'{SUIT_SYMBOLS[s]}{RANKS[r]}' for r, s in cards)
             self._set_message(f'Player {player} played {card_names}')
 
-    def _set_message(self, msg: str):
+    def _set_message(self, msg: str) -> None:
+        """Set the status message to display temporarily.
+
+        Args:
+            msg: Message text to display.
+        """
         self.message = msg
         self.message_time = time.time()
 
-    def _draw(self):
+    def _draw(self) -> None:
+        """Render the entire game screen."""
         self.screen.fill(DARK_GREEN)
         self.card_rects = []
 
@@ -277,7 +348,8 @@ class PanGameApp:
         self._draw_status()
         self._draw_message()
 
-    def _draw_table(self):
+    def _draw_table(self) -> None:
+        """Draw the central table area with cards on it."""
         # Draw table area
         table_rect = pygame.Rect(
             self.config.window_width // 2 - 200,
@@ -304,7 +376,8 @@ class PanGameApp:
         count_text = self.small_font.render(f'Cards on table: {len(table_cards)}', True, WHITE)
         self.screen.blit(count_text, (table_rect.centerx - count_text.get_width() // 2, table_rect.bottom + 10))
 
-    def _draw_ai_hands(self):
+    def _draw_ai_hands(self) -> None:
+        """Draw the AI players' hands as face-down cards."""
         # Player positions: 0=bottom (human), 1=left, 2=top, 3=right
         positions = {
             1: (50, self.config.window_height // 2, 'vertical'),
@@ -333,7 +406,18 @@ class PanGameApp:
         orientation: str,
         is_done: bool,
         is_current: bool,
-    ):
+    ) -> None:
+        """Draw an opponent's hand at the specified position.
+
+        Args:
+            x: X coordinate for the hand position.
+            y: Y coordinate for the hand position.
+            card_count: Number of cards in the hand.
+            player: Player index.
+            orientation: 'horizontal' or 'vertical' layout.
+            is_done: Whether the player has finished.
+            is_current: Whether it's this player's turn.
+        """
         card_back = self.card_renderer.get_card_back()
         small_width = 50
         small_height = 75
@@ -376,7 +460,8 @@ class PanGameApp:
                 if card_back_small:
                     self.screen.blit(card_back_small, (card_x, start_y + i * 20))
 
-    def _draw_human_hand(self):
+    def _draw_human_hand(self) -> None:
+        """Draw the human player's hand with playable card highlighting."""
         hand = self.controller.get_player_hand(self.config.human_player)
         is_current = self.controller.get_current_player() == self.config.human_player
         is_done = self.controller.is_player_done(self.config.human_player)
@@ -421,7 +506,8 @@ class PanGameApp:
                 rect = pygame.Rect(x, y, self.card_renderer.card_width, self.card_renderer.card_height)
                 self.card_rects.append((rect, rank, suit))
 
-    def _draw_buttons(self):
+    def _draw_buttons(self) -> None:
+        """Draw the Take Cards and Restart buttons."""
         # Take cards button
         is_human_turn = self.controller.is_human_turn()
         can_take = ACTION_TAKE_CARDS in self.controller.get_human_actions() if is_human_turn else False
@@ -444,7 +530,8 @@ class PanGameApp:
         text_rect = text.get_rect(center=self.restart_button_rect.center)
         self.screen.blit(text, text_rect)
 
-    def _draw_status(self):
+    def _draw_status(self) -> None:
+        """Draw the game status (current turn or game over message)."""
         if self.controller.is_game_over():
             loser = self.controller.get_loser()
             if loser == self.config.human_player:
@@ -469,7 +556,8 @@ class PanGameApp:
             text = self.font.render(msg, True, color)
             self.screen.blit(text, (10, 10))
 
-    def _draw_message(self):
+    def _draw_message(self) -> None:
+        """Draw the temporary status message if still visible."""
         if self.message and time.time() - self.message_time < 2.0:
             text = self.small_font.render(self.message, True, WHITE)
             text_rect = text.get_rect(center=(self.config.window_width // 2, self.config.window_height // 2 + 130))
@@ -477,6 +565,11 @@ class PanGameApp:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Returns:
+        Parsed arguments with config path.
+    """
     parser = argparse.ArgumentParser(description='Play Pan against AlphaZero AI')
     parser.add_argument(
         '-c',
@@ -488,7 +581,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
+    """Entry point for the Pan game GUI application."""
     args = parse_args()
     if args.config.exists():
         config = PlayConfig.from_yaml(args.config)

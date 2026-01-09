@@ -1,3 +1,9 @@
+"""Core game logic for the Pan card game.
+
+This module implements the game state, rules, and action encoding for Pan,
+a Polish card game where players try to get rid of all their cards.
+"""
+
 import numpy as np
 
 SUITS = ['H', 'D', 'C', 'S']

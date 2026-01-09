@@ -1,3 +1,9 @@
+"""Monte Carlo Tree Search implementation with neural network guidance.
+
+This module provides batched MCTS for efficient parallel search across
+multiple game worlds, guided by policy and value neural networks.
+"""
+
 from copy import deepcopy
 from dataclasses import dataclass
 

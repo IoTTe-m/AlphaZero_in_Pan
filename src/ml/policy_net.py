@@ -1,3 +1,9 @@
+"""Policy network for action probability prediction.
+
+Defines the neural network architecture and loss functions for learning
+action probabilities from game states.
+"""
+
 from functools import partial
 
 from flax import linen as nn

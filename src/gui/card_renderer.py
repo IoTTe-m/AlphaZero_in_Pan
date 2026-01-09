@@ -1,3 +1,5 @@
+"""Card rendering and action-card conversion utilities for the GUI."""
+
 from pathlib import Path
 
 import pygame
@@ -16,14 +18,32 @@ from src.game_logic import (
 
 
 class CardRenderer:
+    """Handles loading and rendering card images for the game GUI.
+
+    Attributes:
+        card_images_dir: Directory containing card image files.
+        card_width: Width of rendered cards in pixels.
+        card_height: Height of rendered cards in pixels.
+        card_images: Mapping from (rank, suit) to loaded pygame surfaces.
+        card_back: Surface for the card back image.
+    """
+
     def __init__(self, card_images_dir: str | Path, card_width: int = 80, card_height: int = 120):
+        """Initialize the card renderer.
+
+        Args:
+            card_images_dir: Directory containing card image files.
+            card_width: Width of rendered cards in pixels.
+            card_height: Height of rendered cards in pixels.
+        """
         self.card_images_dir = Path(card_images_dir)
         self.card_width = card_width
         self.card_height = card_height
         self.card_images: dict[tuple[int, int], pygame.Surface] = {}
         self.card_back: pygame.Surface | None = None
 
-    def load_images(self):
+    def load_images(self) -> None:
+        """Load all card images from the card images directory."""
         for rank in range(NUM_RANKS):
             for suit_idx, suit in enumerate(SUITS):
                 image_path = self.card_images_dir / f'{rank}{suit}.png'
@@ -38,14 +58,35 @@ class CardRenderer:
             self.card_back = pygame.transform.scale(img, (self.card_width, self.card_height))
 
     def get_card_image(self, rank: int, suit: int) -> pygame.Surface | None:
+        """Get the image surface for a specific card.
+
+        Args:
+            rank: Card rank index (0=9, 1=10, ..., 5=A).
+            suit: Card suit index (0=H, 1=D, 2=C, 3=S).
+
+        Returns:
+            Pygame surface for the card, or None if not loaded.
+        """
         return self.card_images.get((rank, suit))
 
     def get_card_back(self) -> pygame.Surface | None:
+        """Get the card back image surface.
+
+        Returns:
+            Pygame surface for card back, or None if not loaded.
+        """
         return self.card_back
 
     @staticmethod
     def action_to_cards(action: int) -> list[tuple[int, int]]:
-        """Decode action ID to list of (rank, suit) tuples."""
+        """Decode an action ID to a list of (rank, suit) tuples.
+
+        Args:
+            action: Action ID from the game logic.
+
+        Returns:
+            List of (rank, suit) tuples representing the cards played.
+        """
         if OFFSET_SINGLE_CARD <= action < OFFSET_THREE_NINES:
             rank = (action - OFFSET_SINGLE_CARD) % NUM_RANKS
             suit = (action - OFFSET_SINGLE_CARD) // NUM_RANKS
@@ -77,5 +118,13 @@ class CardRenderer:
 
     @staticmethod
     def card_to_single_action(rank: int, suit: int) -> int:
-        """Convert a single card to its action ID."""
+        """Convert a single card to its action ID.
+
+        Args:
+            rank: Card rank index.
+            suit: Card suit index.
+
+        Returns:
+            Action ID for playing this single card.
+        """
         return OFFSET_SINGLE_CARD + suit * NUM_RANKS + rank

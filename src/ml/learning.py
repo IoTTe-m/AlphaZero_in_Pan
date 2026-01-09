@@ -1,3 +1,9 @@
+"""AlphaZero self-play training loop.
+
+Implements the training process with self-play game generation,
+replay buffer management, and curriculum learning.
+"""
+
 from collections import deque
 from pathlib import Path
 
@@ -30,6 +36,12 @@ LOSER_VALUE = -1.0
 
 
 class LearningProcess:
+    """AlphaZero self-play training process.
+
+    Manages the training loop including self-play game generation,
+    replay buffer, network training, and checkpointing.
+    """
+
     def __init__(
         self,
         run: wandb.Run,
