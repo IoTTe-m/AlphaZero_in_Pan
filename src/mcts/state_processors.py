@@ -28,7 +28,7 @@ class StateProcessor:
         Returns:
             Array with shifted player indices.
         """
-        return np.where(knowledge_array <= -1, knowledge_array, (knowledge_array - player_number) % no_players)
+        return np.where(knowledge_array <= CARD_UNKNOWN, knowledge_array, (knowledge_array - player_number) % no_players)
 
     @staticmethod
     def get_mcts_state(state: GameState) -> GameState:

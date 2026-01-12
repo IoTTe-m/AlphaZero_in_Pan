@@ -183,7 +183,7 @@ class MCTS:
             action_probs[best_action] = 1.0
             return action_probs
         else:
-            visit_counts_temp = visit_counts ** (1 / temperature)  # TODO: check if correct, maybe softmax?
+            visit_counts_temp = visit_counts ** (1 / temperature)
             total_counts = np.sum(visit_counts_temp)
             if total_counts == 0:
                 return np.ones_like(visit_counts) / len(visit_counts)

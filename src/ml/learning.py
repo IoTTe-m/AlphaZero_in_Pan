@@ -10,10 +10,10 @@ from pathlib import Path
 import numpy as np
 import optax
 import orbax.checkpoint as ocp
+import wandb
 from jax import numpy as jnp
 from tqdm import tqdm
 
-import wandb
 from src.game_logic import OFFSET_SINGLE_CARD, GameState
 from src.mcts.mcts import MCTS
 from src.mcts.state_processors import PolicyStateProcessor, ValueStateProcessor
@@ -33,6 +33,8 @@ PROB_REMOVE_ONE_PLAYER = 0.5  # cumulative threshold
 # Game outcome values
 WINNER_VALUE = 1.0
 LOSER_VALUE = -1.0
+
+ALL_PLAYERS_COUNT = 4
 
 
 class LearningProcess:
@@ -138,7 +140,8 @@ class LearningProcess:
         if np.random.random() < PROB_SKIP_FIRST_MOVE:
             state.execute_action(OFFSET_SINGLE_CARD)
 
-        if self._no_players == 4:
+        # Since we are focused on 4-player games, only apply this logic then
+        if self._no_players == ALL_PLAYERS_COUNT:
             roll = np.random.random()
             if roll < PROB_REMOVE_TWO_PLAYERS:
                 players_to_remove = [p for p in range(self._no_players) if p != state.current_player]
