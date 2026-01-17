@@ -8,21 +8,14 @@ from pathlib import Path
 
 import pygame
 
-from src.game_logic import (
-    ACTION_TAKE_CARDS,
-    OFFSET_FOUR_CARDS,
-    OFFSET_FOUR_NINES,
-    OFFSET_THREE_NINES,
-    RANKS,
-    SUIT_SYMBOLS,
-)
+from src.game_logic import ACTION_TAKE_CARDS, RANKS, SUIT_SYMBOLS
 from src.gui.card_renderer import CardRenderer
 from src.gui.config import PlayConfig
 from src.gui.game_controller import GameController
+from src.gui.selection import CardSelection
 
 DEFAULT_CONFIG = Path(__file__).parent.parent.parent / 'configs' / 'play.yaml'
 
-# Colors
 WHITE = (255, 255, 255)
 GREEN = (34, 139, 34)
 DARK_GREEN = (0, 100, 0)
@@ -32,6 +25,52 @@ RED = (255, 0, 0)
 GRAY = (128, 128, 128)
 LIGHT_BLUE = (173, 216, 230)
 
+FPS = 60
+AI_DELAY_SECONDS = 0.5
+MAIN_FONT_SIZE = 36
+SMALL_FONT_SIZE = 24
+MESSAGE_DURATION_SECONDS = 2.0
+MESSAGE_OFFSET_Y = 130
+UI_MARGIN = 10
+STATUS_TEXT_Y = 20
+OPPONENT_POSITION_MARGIN = 50
+
+TABLE_WIDTH = 400
+TABLE_HEIGHT = 200
+TABLE_CARD_SPACING = 30
+TABLE_MAX_VISIBLE_CARDS = 6
+TABLE_BORDER_WIDTH = 3
+TABLE_CORNER_RADIUS = 20
+TABLE_COUNT_OFFSET_Y = 10
+
+HUMAN_HAND_LABEL_OFFSET = 200
+HUMAN_HAND_Y_OFFSET = 160
+HAND_CARD_SPACING = 90
+
+OPPONENT_CARD_BACK_WIDTH = 50
+OPPONENT_CARD_BACK_HEIGHT = 75
+OPPONENT_HAND_CARD_SPACING_HORIZONTAL = 25
+OPPONENT_HAND_CARD_SPACING_VERTICAL = 20
+OPPONENT_HAND_MAX_WIDTH = 200
+OPPONENT_HAND_MAX_HEIGHT = 150
+OPPONENT_LABEL_OFFSET = 30
+OPPONENT_LABEL_PADDING = 40
+
+TAKE_BUTTON_WIDTH = 150
+TAKE_BUTTON_HEIGHT = 50
+TAKE_BUTTON_X_OFFSET = 200
+RESTART_BUTTON_WIDTH = 120
+RESTART_BUTTON_HEIGHT = 50
+RESTART_BUTTON_X = 50
+BUTTON_Y_OFFSET = 100
+BUTTON_CORNER_RADIUS = 10
+BUTTON_BORDER_WIDTH = 2
+
+HIGHLIGHT_SELECTED_PADDING = 4
+HIGHLIGHT_PLAYABLE_PADDING = 3
+HIGHLIGHT_CORNER_RADIUS = 5
+SELECTION_MARKER_RADIUS = 12
+
 
 class PanGameApp:
     """Pygame-based GUI application for playing Pan against AlphaZero AI.
@@ -40,22 +79,22 @@ class PanGameApp:
     with the AI through asynchronous MCTS computation.
 
     Attributes:
-        config: Game and display configuration.
-        controller: Game logic and AI controller.
-        card_renderer: Handles card image loading and rendering.
-        screen: Pygame display surface.
-        font: Main font for text rendering.
-        small_font: Smaller font for messages.
-        selected_cards: Currently selected cards for multi-card actions.
-        card_rects: Clickable regions for player's cards.
-        take_button_rect: Clickable region for take cards button.
-        restart_button_rect: Clickable region for restart button.
-        message: Current status message to display.
-        message_time: Timestamp when message was set.
-        ai_delay: Delay before AI moves in seconds.
-        ai_thinking: Whether AI is currently computing.
-        ai_action: Computed AI action waiting to be applied.
-        ai_player: Player index for pending AI action.
+        _config: Game and display configuration.
+        _controller: Game logic and AI controller.
+        _card_renderer: Handles card image loading and rendering.
+        _screen: Pygame display surface.
+        _font: Main font for text rendering.
+        _small_font: Smaller font for messages.
+        _selection: Ordered selection for multi-card actions.
+        _card_rects: Clickable regions for player's cards.
+        _take_button_rect: Clickable region for take cards button.
+        _restart_button_rect: Clickable region for restart button.
+        _message: Current status message to display.
+        _message_time: Timestamp when message was set.
+        _ai_delay: Delay before AI moves in seconds.
+        _ai_thinking: Whether AI is currently computing.
+        _ai_action: Computed AI action waiting to be applied.
+        _ai_player: Player index for pending AI action.
     """
 
     def __init__(self, config: PlayConfig):
@@ -64,30 +103,30 @@ class PanGameApp:
         Args:
             config: Configuration for the game and display.
         """
-        self.config = config
-        self.controller = GameController(config)
-        self.card_renderer = CardRenderer(config.card_images_dir)
+        self._config = config
+        self._controller = GameController(config)
+        self._card_renderer = CardRenderer(config.card_images_dir)
 
         pygame.init()
-        self.screen = pygame.display.set_mode((config.window_width, config.window_height))
+        self._screen = pygame.display.set_mode((config.window_width, config.window_height))
         pygame.display.set_caption('Pan - AlphaZero')
-        self.font = pygame.font.Font(None, 36)
-        self.small_font = pygame.font.Font(None, 24)
+        self._font = pygame.font.Font(None, MAIN_FONT_SIZE)
+        self._small_font = pygame.font.Font(None, SMALL_FONT_SIZE)
 
-        self.card_renderer.load_images()
+        self._card_renderer.load_images()
 
-        self.selected_cards: list[tuple[int, int]] = []
-        self.card_rects: list[tuple[pygame.Rect, int, int]] = []  # (rect, rank, suit)
-        self.take_button_rect: pygame.Rect | None = None
-        self.restart_button_rect: pygame.Rect | None = None
+        self._selection = CardSelection()
+        self._card_rects: list[tuple[pygame.Rect, int, int]] = []
+        self._take_button_rect: pygame.Rect | None = None
+        self._restart_button_rect: pygame.Rect | None = None
 
-        self.message = ''
-        self.message_time = 0.0
+        self._message = ''
+        self._message_time = 0.0
 
-        self.ai_delay = 0.5
-        self.ai_thinking = False
-        self.ai_action: int | None = None
-        self.ai_player: int | None = None
+        self._ai_delay = AI_DELAY_SECONDS
+        self._ai_thinking = False
+        self._ai_action: int | None = None
+        self._ai_player: int | None = None
         self._shutdown = False
 
     def _compute_ai_action_async(self, player: int) -> None:
@@ -96,12 +135,12 @@ class PanGameApp:
         Args:
             player: Player index for which to compute the action.
         """
-        action = self.controller.get_ai_action()
+        action = self._controller.get_ai_action()
         if self._shutdown:
             return
-        self.ai_action = action
-        self.ai_player = player
-        self.ai_thinking = False
+        self._ai_action = action
+        self._ai_player = player
+        self._ai_thinking = False
 
     def run(self) -> None:
         """Run the main game loop until the window is closed."""
@@ -118,24 +157,22 @@ class PanGameApp:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self._handle_click(event.pos)
 
-            # Check if AI finished computing
-            if self.ai_action is not None:
+            if self._ai_action is not None:
                 self._apply_ai_action()
                 last_ai_move_time = current_time
 
-            # Start AI turn if needed
             if (
-                not self.controller.is_game_over()
-                and not self.controller.is_human_turn()
-                and not self.ai_thinking
-                and self.ai_action is None
-                and current_time - last_ai_move_time > self.ai_delay
+                not self._controller.is_game_over()
+                and not self._controller.is_human_turn()
+                and not self._ai_thinking
+                and self._ai_action is None
+                and current_time - last_ai_move_time > self._ai_delay
             ):
                 self._start_ai_turn()
 
             self._draw()
             pygame.display.flip()
-            clock.tick(60)
+            clock.tick(FPS)
 
         self._shutdown = True
         pygame.quit()
@@ -147,29 +184,26 @@ class PanGameApp:
         Args:
             pos: Mouse position (x, y) of the click.
         """
-        # Check restart button
-        if self.restart_button_rect and self.restart_button_rect.collidepoint(pos):
-            self.controller.restart()
-            self.selected_cards = []
-            self.message = ''
+        if self._restart_button_rect and self._restart_button_rect.collidepoint(pos):
+            self._controller.restart()
+            self._selection.clear()
+            self._message = ''
             return
 
-        if self.controller.is_game_over():
+        if self._controller.is_game_over():
             return
 
-        if not self.controller.is_human_turn():
+        if not self._controller.is_human_turn():
             return
 
-        # Check take cards button
-        if self.take_button_rect and self.take_button_rect.collidepoint(pos):
-            if ACTION_TAKE_CARDS in self.controller.get_human_actions():
-                self.controller.execute_action(ACTION_TAKE_CARDS)
+        if self._take_button_rect and self._take_button_rect.collidepoint(pos):
+            if ACTION_TAKE_CARDS in self._controller.get_human_actions():
+                self._controller.execute_action(ACTION_TAKE_CARDS)
                 self._set_message('You took 3 cards')
-                self.selected_cards = []
+                self._selection.clear()
             return
 
-        # Check card clicks
-        for rect, rank, suit in self.card_rects:
+        for rect, rank, suit in self._card_rects:
             if rect.collidepoint(pos):
                 self._handle_card_click(rank, suit)
                 return
@@ -181,145 +215,115 @@ class PanGameApp:
             rank: Card rank index.
             suit: Card suit index.
         """
-        legal_actions = self.controller.get_human_actions()
+        legal_actions = self._controller.get_human_actions()
+        card = (rank, suit)
 
-        # Check if this card can be part of a multi-card action
-        multi_card_actions = self._get_multi_card_actions_for_card(rank, suit, legal_actions)
-
-        if multi_card_actions:
-            # Toggle selection
-            card = (rank, suit)
-            if card in self.selected_cards:
-                self.selected_cards.remove(card)
-            else:
-                self.selected_cards.append(card)
-
-            # Check if current selection forms a valid multi-card action
-            action = self._try_match_selection_to_action(legal_actions)
-            if action is not None:
-                self.controller.execute_action(action)
-                cards = CardRenderer.action_to_cards(action)
-                card_names = ' '.join(f'{SUIT_SYMBOLS[s]}{RANKS[r]}' for r, s in cards)
-                self._set_message(f'You played {card_names}')
-                self.selected_cards = []
+        if self._is_multi_selectable(card, legal_actions):
+            self._selection.toggle(card)
+            if self._try_play_selection(legal_actions):
+                return
             return
 
-        # No multi-card actions possible - try single card
-        single_action = CardRenderer.card_to_single_action(rank, suit)
-        if single_action in legal_actions:
-            self.controller.execute_action(single_action)
-            card_name = f'{SUIT_SYMBOLS[suit]}{RANKS[rank]}'
-            self._set_message(f'You played {card_name}')
-            self.selected_cards = []
+        if self._try_play_single(card, legal_actions):
             return
 
         self._set_message('Cannot play this card')
 
-    def _get_multi_card_actions_for_card(self, rank: int, suit: int, legal_actions: list[int]) -> list[int]:
-        """Get multi-card actions that include this card.
-
-        Args:
-            rank: Card rank index.
-            suit: Card suit index.
-            legal_actions: List of currently legal action IDs.
-
-        Returns:
-            List of multi-card action IDs that involve this card.
-        """
-        multi_actions = []
-
-        # Check three nines (only for 9s, suits D/C/S - not H which starts)
-        if rank == 0 and suit in [1, 2, 3]:  # 9 of D, C, or S
-            for action in range(OFFSET_THREE_NINES, OFFSET_FOUR_NINES):
-                if action in legal_actions:
-                    multi_actions.append(action)
-
-        # Check four nines (only for 9s)
-        if rank == 0:
-            for action in range(OFFSET_FOUR_NINES, OFFSET_FOUR_CARDS):
-                if action in legal_actions:
-                    multi_actions.append(action)
-
-        # Check four of a kind (ranks 10, J, Q, K, A = indices 1-5)
-        if rank >= 1:
-            start = OFFSET_FOUR_CARDS + (rank - 1) * 4
-            end = start + 4
-            for action in range(start, end):
-                if action in legal_actions:
-                    multi_actions.append(action)
-
-        return multi_actions
-
-    def _try_match_selection_to_action(self, legal_actions: list[int]) -> int | None:
-        """Check if current card selection matches any multi-card action.
+    def _multi_action_cards(self, legal_actions: list[int]) -> set[tuple[int, int]]:
+        """Collect cards that are part of any multi-card legal action.
 
         Args:
             legal_actions: List of currently legal action IDs.
 
         Returns:
-            Matching action ID, or None if no match.
+            Set of cards (rank, suit) that appear in multi-card actions.
         """
-        if len(self.selected_cards) < 3:
-            return None
+        cards = set()
+        for action in legal_actions:
+            action_cards = CardRenderer.action_to_cards(action)
+            if len(action_cards) > 1:
+                cards.update(action_cards)
+        return cards
 
-        selected_ranks = [r for r, s in self.selected_cards]
-        selected_suits = [s for r, s in self.selected_cards]
+    def _is_multi_selectable(self, card: tuple[int, int], legal_actions: list[int]) -> bool:
+        """Check if a card can be part of a multi-card selection.
 
-        # All same rank?
-        if len(set(selected_ranks)) != 1:
-            return None
+        Args:
+            card: Card to check as (rank, suit).
+            legal_actions: List of currently legal action IDs.
 
-        rank = selected_ranks[0]
+        Returns:
+            True if the card appears in any multi-card legal action.
+        """
+        return card in self._multi_action_cards(legal_actions)
 
-        # Three nines
-        if rank == 0 and len(self.selected_cards) == 3:
-            # Find which three-nines action matches (based on spade position)
-            sorted_suits = sorted(selected_suits)
-            if sorted_suits == [1, 2, 3]:  # D, C, S
-                # Determine spade position in play order
-                for action in range(OFFSET_THREE_NINES, OFFSET_FOUR_NINES):
-                    if action in legal_actions:
-                        return action
+    def _try_play_selection(self, legal_actions: list[int]) -> bool:
+        """Try to play the ordered selection as a multi-card action.
 
-        # Four nines
-        if rank == 0 and len(self.selected_cards) == 4:
-            for action in range(OFFSET_FOUR_NINES, OFFSET_FOUR_CARDS):
-                if action in legal_actions:
-                    return action
+        Args:
+            legal_actions: List of currently legal action IDs.
 
-        # Four of other ranks
-        if rank >= 1 and len(self.selected_cards) == 4:
-            start = OFFSET_FOUR_CARDS + (rank - 1) * 4
-            end = start + 4
-            for action in range(start, end):
-                if action in legal_actions:
-                    return action
+        Returns:
+            True if a matching action was executed.
+        """
+        ordered_cards = self._selection.ordered()
+        if len(ordered_cards) < 3:
+            return False
 
-        return None
+        action = CardRenderer.action_for_card_sequence(ordered_cards, legal_actions)
+        if action is None:
+            return False
+
+        self._controller.execute_action(action)
+        card_names = ' '.join(f'{SUIT_SYMBOLS[s]}{RANKS[r]}' for r, s in ordered_cards)
+        self._set_message(f'You played {card_names}')
+        self._selection.clear()
+        return True
+
+    def _try_play_single(self, card: tuple[int, int], legal_actions: list[int]) -> bool:
+        """Try to play a single card action.
+
+        Args:
+            card: Card to play as (rank, suit).
+            legal_actions: List of currently legal action IDs.
+
+        Returns:
+            True if the single-card action was executed.
+        """
+        rank, suit = card
+        single_action = CardRenderer.card_to_single_action(rank, suit)
+        if single_action not in legal_actions:
+            return False
+
+        self._controller.execute_action(single_action)
+        card_name = f'{SUIT_SYMBOLS[suit]}{RANKS[rank]}'
+        self._set_message(f'You played {card_name}')
+        self._selection.clear()
+        return True
 
     def _start_ai_turn(self) -> None:
         """Start computing AI action in a background thread."""
-        player = self.controller.get_current_player()
-        if self.controller.is_player_done(player):
+        player = self._controller.get_current_player()
+        if self._controller.is_player_done(player):
             return
 
-        self.ai_thinking = True
+        self._ai_thinking = True
         self._set_message(f'Player {player} is thinking...')
         thread = threading.Thread(target=self._compute_ai_action_async, args=(player,), daemon=True)
         thread.start()
 
     def _apply_ai_action(self) -> None:
         """Apply the computed AI action to the game state."""
-        action = self.ai_action
-        player = self.ai_player
-        self.ai_action = None
-        self.ai_player = None
+        action = self._ai_action
+        player = self._ai_player
+        self._ai_action = None
+        self._ai_player = None
 
         if action is None or player is None:
             return
 
         cards = CardRenderer.action_to_cards(action)
-        self.controller.execute_action(action)
+        self._controller.execute_action(action)
 
         if action == ACTION_TAKE_CARDS:
             self._set_message(f'Player {player} took cards')
@@ -333,13 +337,13 @@ class PanGameApp:
         Args:
             msg: Message text to display.
         """
-        self.message = msg
-        self.message_time = time.time()
+        self._message = msg
+        self._message_time = time.time()
 
     def _draw(self) -> None:
         """Render the entire game screen."""
-        self.screen.fill(DARK_GREEN)
-        self.card_rects = []
+        self._screen.fill(DARK_GREEN)
+        self._card_rects = []
 
         self._draw_table()
         self._draw_ai_hands()
@@ -350,48 +354,84 @@ class PanGameApp:
 
     def _draw_table(self) -> None:
         """Draw the central table area with cards on it."""
-        # Draw table area
+        table_rect = self._draw_table_surface()
+        table_cards = self._controller.get_table_cards()
+        visible_cards = self._get_visible_table_cards(table_cards)
+        self._draw_table_cards(table_rect, visible_cards)
+        self._draw_table_count(table_rect, len(table_cards))
+
+    def _draw_table_surface(self) -> pygame.Rect:
+        """Draw the table background and return its rectangle.
+
+        Returns:
+            Rectangle of the table area.
+        """
         table_rect = pygame.Rect(
-            self.config.window_width // 2 - 200,
-            self.config.window_height // 2 - 100,
-            400,
-            200,
+            self._config.window_width // 2 - TABLE_WIDTH // 2,
+            self._config.window_height // 2 - TABLE_HEIGHT // 2,
+            TABLE_WIDTH,
+            TABLE_HEIGHT,
         )
-        pygame.draw.rect(self.screen, GREEN, table_rect, border_radius=20)
-        pygame.draw.rect(self.screen, WHITE, table_rect, 3, border_radius=20)
+        pygame.draw.rect(self._screen, GREEN, table_rect, border_radius=TABLE_CORNER_RADIUS)
+        pygame.draw.rect(self._screen, WHITE, table_rect, TABLE_BORDER_WIDTH, border_radius=TABLE_CORNER_RADIUS)
+        return table_rect
 
-        # Draw cards on table (show last few)
-        table_cards = self.controller.get_table_cards()
-        visible_cards = table_cards[-6:] if len(table_cards) > 6 else table_cards
+    def _get_visible_table_cards(self, table_cards: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        """Select the subset of table cards to display.
 
-        start_x = table_rect.centerx - (len(visible_cards) * 30) // 2
-        for i, (rank, suit) in enumerate(visible_cards):
-            card_img = self.card_renderer.get_card_image(rank, suit)
+        Args:
+            table_cards: Full list of cards on the table.
+
+        Returns:
+            Cards to display.
+        """
+        if len(table_cards) > TABLE_MAX_VISIBLE_CARDS:
+            return table_cards[-TABLE_MAX_VISIBLE_CARDS:]
+        return table_cards
+
+    def _draw_table_cards(self, table_rect: pygame.Rect, cards: list[tuple[int, int]]) -> None:
+        """Draw cards on the table.
+
+        Args:
+            table_rect: Rectangle of the table area.
+            cards: Cards to display.
+        """
+        start_x = table_rect.centerx - (len(cards) * TABLE_CARD_SPACING) // 2
+        for i, (rank, suit) in enumerate(cards):
+            card_img = self._card_renderer.get_card_image(rank, suit)
             if card_img:
-                x = start_x + i * 30
-                y = table_rect.centery - self.card_renderer.card_height // 2
-                self.screen.blit(card_img, (x, y))
+                x = start_x + i * TABLE_CARD_SPACING
+                y = table_rect.centery - self._card_renderer.card_height // 2
+                self._screen.blit(card_img, (x, y))
 
-        # Show card count
-        count_text = self.small_font.render(f'Cards on table: {len(table_cards)}', True, WHITE)
-        self.screen.blit(count_text, (table_rect.centerx - count_text.get_width() // 2, table_rect.bottom + 10))
+    def _draw_table_count(self, table_rect: pygame.Rect, count: int) -> None:
+        """Draw the table card count below the table.
+
+        Args:
+            table_rect: Rectangle of the table area.
+            count: Number of cards on the table.
+        """
+        count_text = self._small_font.render(f'Cards on table: {count}', True, WHITE)
+        self._screen.blit(
+            count_text,
+            (table_rect.centerx - count_text.get_width() // 2, table_rect.bottom + TABLE_COUNT_OFFSET_Y),
+        )
 
     def _draw_ai_hands(self) -> None:
         """Draw the AI players' hands as face-down cards."""
-        # Player positions: 0=bottom (human), 1=left, 2=top, 3=right
         positions = {
-            1: (50, self.config.window_height // 2, 'vertical'),
-            2: (self.config.window_width // 2, 50, 'horizontal'),
-            3: (self.config.window_width - 50, self.config.window_height // 2, 'vertical'),
+            1: (OPPONENT_POSITION_MARGIN, self._config.window_height // 2, 'vertical'),
+            2: (self._config.window_width // 2, OPPONENT_POSITION_MARGIN, 'horizontal'),
+            3: (self._config.window_width - OPPONENT_POSITION_MARGIN, self._config.window_height // 2, 'vertical'),
         }
 
-        for player in range(self.config.player_count):
-            if player == self.config.human_player:
+        for player in range(self._config.player_count):
+            if player == self._config.human_player:
                 continue
 
-            hand = self.controller.get_player_hand(player)
-            is_done = self.controller.is_player_done(player)
-            is_current = self.controller.get_current_player() == player
+            hand = self._controller.get_player_hand(player)
+            is_done = self._controller.is_player_done(player)
+            is_current = self._controller.get_current_player() == player
 
             if player in positions:
                 x, y, orientation = positions[player]
@@ -418,150 +458,286 @@ class PanGameApp:
             is_done: Whether the player has finished.
             is_current: Whether it's this player's turn.
         """
-        card_back = self.card_renderer.get_card_back()
-        small_width = 50
-        small_height = 75
-        card_back_small = None
+        card_back_small = self._get_opponent_card_back()
+        label = self._render_player_label(player, is_done, is_current)
+        self._draw_opponent_label(x, y, orientation, label)
+        if orientation == 'horizontal':
+            self._draw_opponent_cards_horizontal(x, y, card_count, card_back_small)
+        else:
+            self._draw_opponent_cards_vertical(x, y, card_count, card_back_small, label)
 
-        if card_back:
-            card_back_small = pygame.transform.scale(card_back, (small_width, small_height))
+    def _get_opponent_card_back(self) -> pygame.Surface | None:
+        """Get the scaled opponent card back surface.
 
-        # Draw player label
-        status = ' ✓' if is_done else ''
+        Returns:
+            Scaled card back surface if available.
+        """
+        card_back = self._card_renderer.get_card_back()
+        if not card_back:
+            return None
+        return pygame.transform.scale(card_back, (OPPONENT_CARD_BACK_WIDTH, OPPONENT_CARD_BACK_HEIGHT))
+
+    def _render_player_label(self, player: int, is_done: bool, is_current: bool) -> pygame.Surface:
+        """Render a player label surface.
+
+        Args:
+            player: Player index.
+            is_done: Whether the player has finished.
+            is_current: Whether it's this player's turn.
+
+        Returns:
+            Rendered label surface.
+        """
+        status = ' (done)' if is_done else ''
         color = YELLOW if is_current else WHITE
-        label = self.font.render(f'P{player}{status}', True, color)
+        return self._font.render(f'P{player}{status}', True, color)
 
+    def _draw_opponent_label(self, x: int, y: int, orientation: str, label: pygame.Surface) -> None:
+        """Draw the opponent label at the correct position.
+
+        Args:
+            x: X coordinate for the hand position.
+            y: Y coordinate for the hand position.
+            orientation: 'horizontal' or 'vertical' layout.
+            label: Rendered label surface.
+        """
         if orientation == 'horizontal':
             label_x = x - label.get_width() // 2
-            label_y = y - 30
-            self.screen.blit(label, (label_x, label_y))
-
-            # Draw cards horizontally
-            total_width = min(card_count * 25, 200)
-            start_x = x - total_width // 2
-            for i in range(card_count):
-                if card_back_small:
-                    self.screen.blit(card_back_small, (start_x + i * 25, y))
+            label_y = y - OPPONENT_LABEL_OFFSET
         else:
-            # Vertical layout for left/right players
-            if x < self.config.window_width // 2:  # Left player
-                label_x = x
-                card_x = x
-            else:  # Right player
-                label_x = x - label.get_width()
-                card_x = x - small_width
+            label_x = x if x < self._config.window_width // 2 else x - label.get_width()
+            label_y = y - OPPONENT_CARD_BACK_HEIGHT - OPPONENT_LABEL_PADDING
+        self._screen.blit(label, (label_x, label_y))
 
-            label_y = y - small_height - 40
-            self.screen.blit(label, (label_x, label_y))
+    def _draw_opponent_cards_horizontal(
+        self,
+        x: int,
+        y: int,
+        card_count: int,
+        card_back_small: pygame.Surface | None,
+    ) -> None:
+        """Draw a horizontal opponent hand.
 
-            total_height = min(card_count * 20, 150)
-            start_y = y - total_height // 2
-            for i in range(card_count):
-                if card_back_small:
-                    self.screen.blit(card_back_small, (card_x, start_y + i * 20))
+        Args:
+            x: X coordinate for the hand position.
+            y: Y coordinate for the hand position.
+            card_count: Number of cards in the hand.
+            card_back_small: Scaled card back surface.
+        """
+        total_width = min(card_count * OPPONENT_HAND_CARD_SPACING_HORIZONTAL, OPPONENT_HAND_MAX_WIDTH)
+        start_x = x - total_width // 2
+        for i in range(card_count):
+            if card_back_small:
+                self._screen.blit(card_back_small, (start_x + i * OPPONENT_HAND_CARD_SPACING_HORIZONTAL, y))
+
+    def _draw_opponent_cards_vertical(
+        self,
+        x: int,
+        y: int,
+        card_count: int,
+        card_back_small: pygame.Surface | None,
+        label: pygame.Surface,
+    ) -> None:
+        """Draw a vertical opponent hand.
+
+        Args:
+            x: X coordinate for the hand position.
+            y: Y coordinate for the hand position.
+            card_count: Number of cards in the hand.
+            card_back_small: Scaled card back surface.
+            label: Rendered label surface.
+        """
+        if x < self._config.window_width // 2:
+            card_x = x
+        else:
+            card_x = x - OPPONENT_CARD_BACK_WIDTH
+
+        total_height = min(card_count * OPPONENT_HAND_CARD_SPACING_VERTICAL, OPPONENT_HAND_MAX_HEIGHT)
+        start_y = y - total_height // 2
+        for i in range(card_count):
+            if card_back_small:
+                self._screen.blit(card_back_small, (card_x, start_y + i * OPPONENT_HAND_CARD_SPACING_VERTICAL))
 
     def _draw_human_hand(self) -> None:
         """Draw the human player's hand with playable card highlighting."""
-        hand = self.controller.get_player_hand(self.config.human_player)
-        is_current = self.controller.get_current_player() == self.config.human_player
-        is_done = self.controller.is_player_done(self.config.human_player)
+        hand = self._controller.get_player_hand(self._config.human_player)
+        is_current = self._controller.get_current_player() == self._config.human_player
+        is_done = self._controller.is_player_done(self._config.human_player)
+        self._draw_human_label(is_done, is_current)
+        legal_actions = self._controller.get_human_actions() if is_current else []
+        multi_action_cards = self._multi_action_cards(legal_actions)
+        self._draw_human_cards(hand, legal_actions, multi_action_cards)
 
-        # Draw label
-        status = ' ✓' if is_done else ''
+    def _draw_human_label(self, is_done: bool, is_current: bool) -> None:
+        """Draw the label for the human player's hand.
+
+        Args:
+            is_done: Whether the human player has finished.
+            is_current: Whether it's the human player's turn.
+        """
+        status = ' (done)' if is_done else ''
         color = YELLOW if is_current else WHITE
-        label = self.font.render(f'Your Hand{status}', True, color)
-        self.screen.blit(label, (self.config.window_width // 2 - label.get_width() // 2, self.config.window_height - 200))
+        label = self._font.render(f'Your Hand{status}', True, color)
+        self._screen.blit(
+            label,
+            (
+                self._config.window_width // 2 - label.get_width() // 2,
+                self._config.window_height - HUMAN_HAND_LABEL_OFFSET,
+            ),
+        )
 
-        # Draw cards
-        card_spacing = 90
+    def _draw_human_cards(
+        self,
+        hand: list[tuple[int, int]],
+        legal_actions: list[int],
+        multi_action_cards: set[tuple[int, int]],
+    ) -> None:
+        """Draw the human player's cards with selection and playability highlights.
+
+        Args:
+            hand: Cards in the human player's hand.
+            legal_actions: List of legal action IDs.
+            multi_action_cards: Cards that are part of multi-card actions.
+        """
+        card_spacing = HAND_CARD_SPACING
         total_width = len(hand) * card_spacing
-        start_x = self.config.window_width // 2 - total_width // 2
-
-        legal_actions = self.controller.get_human_actions() if is_current else []
-
+        start_x = self._config.window_width // 2 - total_width // 2
+        y = self._config.window_height - HUMAN_HAND_Y_OFFSET
         for i, (rank, suit) in enumerate(hand):
             x = start_x + i * card_spacing
-            y = self.config.window_height - 160
+            self._draw_human_card(x, y, rank, suit, legal_actions, multi_action_cards)
 
-            card_img = self.card_renderer.get_card_image(rank, suit)
-            if card_img:
-                # Check if card is selected
-                is_selected = (rank, suit) in self.selected_cards
+    def _draw_human_card(
+        self,
+        x: int,
+        y: int,
+        rank: int,
+        suit: int,
+        legal_actions: list[int],
+        multi_action_cards: set[tuple[int, int]],
+    ) -> None:
+        """Draw a single card in the human player's hand.
 
-                # Highlight playable cards
-                single_action = CardRenderer.card_to_single_action(rank, suit)
-                is_playable = single_action in legal_actions
-                can_be_multi = len(self._get_multi_card_actions_for_card(rank, suit, legal_actions)) > 0
+        Args:
+            x: X coordinate for the card.
+            y: Y coordinate for the card.
+            rank: Card rank index.
+            suit: Card suit index.
+            legal_actions: List of legal action IDs.
+            multi_action_cards: Cards that are part of multi-card actions.
+        """
+        card_img = self._card_renderer.get_card_image(rank, suit)
+        if not card_img:
+            return
 
-                if is_selected:
-                    # Yellow highlight for selected cards
-                    highlight_rect = pygame.Rect(x - 4, y - 4, self.card_renderer.card_width + 8, self.card_renderer.card_height + 8)
-                    pygame.draw.rect(self.screen, YELLOW, highlight_rect, border_radius=5)
-                elif is_playable or can_be_multi:
-                    highlight_rect = pygame.Rect(x - 3, y - 3, self.card_renderer.card_width + 6, self.card_renderer.card_height + 6)
-                    pygame.draw.rect(self.screen, LIGHT_BLUE, highlight_rect, border_radius=5)
+        card = (rank, suit)
+        selection_index = self._selection.index_of(card)
+        single_action = CardRenderer.card_to_single_action(rank, suit)
+        is_playable = single_action in legal_actions
+        can_be_multi = card in multi_action_cards
 
-                self.screen.blit(card_img, (x, y))
+        if selection_index is not None:
+            highlight_rect = pygame.Rect(
+                x - HIGHLIGHT_SELECTED_PADDING,
+                y - HIGHLIGHT_SELECTED_PADDING,
+                self._card_renderer.card_width + HIGHLIGHT_SELECTED_PADDING * 2,
+                self._card_renderer.card_height + HIGHLIGHT_SELECTED_PADDING * 2,
+            )
+            pygame.draw.rect(self._screen, YELLOW, highlight_rect, border_radius=HIGHLIGHT_CORNER_RADIUS)
+            self._draw_selection_index(x, y, selection_index)
+        elif is_playable or can_be_multi:
+            highlight_rect = pygame.Rect(
+                x - HIGHLIGHT_PLAYABLE_PADDING,
+                y - HIGHLIGHT_PLAYABLE_PADDING,
+                self._card_renderer.card_width + HIGHLIGHT_PLAYABLE_PADDING * 2,
+                self._card_renderer.card_height + HIGHLIGHT_PLAYABLE_PADDING * 2,
+            )
+            pygame.draw.rect(self._screen, LIGHT_BLUE, highlight_rect, border_radius=HIGHLIGHT_CORNER_RADIUS)
 
-                rect = pygame.Rect(x, y, self.card_renderer.card_width, self.card_renderer.card_height)
-                self.card_rects.append((rect, rank, suit))
+        self._screen.blit(card_img, (x, y))
+
+        rect = pygame.Rect(x, y, self._card_renderer.card_width, self._card_renderer.card_height)
+        self._card_rects.append((rect, rank, suit))
+
+    def _draw_selection_index(self, x: int, y: int, index: int) -> None:
+        """Draw a small selection index marker on a card.
+
+        Args:
+            x: X coordinate of the card.
+            y: Y coordinate of the card.
+            index: 1-based selection index.
+        """
+        radius = SELECTION_MARKER_RADIUS
+        center = (x + radius, y + radius)
+        pygame.draw.circle(self._screen, WHITE, center, radius)
+        text = self._small_font.render(str(index), True, BLACK)
+        text_rect = text.get_rect(center=center)
+        self._screen.blit(text, text_rect)
 
     def _draw_buttons(self) -> None:
         """Draw the Take Cards and Restart buttons."""
-        # Take cards button
-        is_human_turn = self.controller.is_human_turn()
-        can_take = ACTION_TAKE_CARDS in self.controller.get_human_actions() if is_human_turn else False
+        is_human_turn = self._controller.is_human_turn()
+        can_take = ACTION_TAKE_CARDS in self._controller.get_human_actions() if is_human_turn else False
 
         button_color = LIGHT_BLUE if can_take else GRAY
-        self.take_button_rect = pygame.Rect(self.config.window_width - 200, self.config.window_height - 100, 150, 50)
-        pygame.draw.rect(self.screen, button_color, self.take_button_rect, border_radius=10)
-        pygame.draw.rect(self.screen, WHITE, self.take_button_rect, 2, border_radius=10)
+        self._take_button_rect = pygame.Rect(
+            self._config.window_width - TAKE_BUTTON_X_OFFSET,
+            self._config.window_height - BUTTON_Y_OFFSET,
+            TAKE_BUTTON_WIDTH,
+            TAKE_BUTTON_HEIGHT,
+        )
+        pygame.draw.rect(self._screen, button_color, self._take_button_rect, border_radius=BUTTON_CORNER_RADIUS)
+        pygame.draw.rect(self._screen, WHITE, self._take_button_rect, BUTTON_BORDER_WIDTH, border_radius=BUTTON_CORNER_RADIUS)
 
-        text = self.font.render('Take Cards', True, BLACK if can_take else WHITE)
-        text_rect = text.get_rect(center=self.take_button_rect.center)
-        self.screen.blit(text, text_rect)
+        text = self._font.render('Take Cards', True, BLACK if can_take else WHITE)
+        text_rect = text.get_rect(center=self._take_button_rect.center)
+        self._screen.blit(text, text_rect)
 
-        # Restart button
-        self.restart_button_rect = pygame.Rect(50, self.config.window_height - 100, 120, 50)
-        pygame.draw.rect(self.screen, RED, self.restart_button_rect, border_radius=10)
-        pygame.draw.rect(self.screen, WHITE, self.restart_button_rect, 2, border_radius=10)
+        self._restart_button_rect = pygame.Rect(
+            RESTART_BUTTON_X,
+            self._config.window_height - BUTTON_Y_OFFSET,
+            RESTART_BUTTON_WIDTH,
+            RESTART_BUTTON_HEIGHT,
+        )
+        pygame.draw.rect(self._screen, RED, self._restart_button_rect, border_radius=BUTTON_CORNER_RADIUS)
+        pygame.draw.rect(self._screen, WHITE, self._restart_button_rect, BUTTON_BORDER_WIDTH, border_radius=BUTTON_CORNER_RADIUS)
 
-        text = self.font.render('Restart', True, WHITE)
-        text_rect = text.get_rect(center=self.restart_button_rect.center)
-        self.screen.blit(text, text_rect)
+        text = self._font.render('Restart', True, WHITE)
+        text_rect = text.get_rect(center=self._restart_button_rect.center)
+        self._screen.blit(text, text_rect)
 
     def _draw_status(self) -> None:
         """Draw the game status (current turn or game over message)."""
-        if self.controller.is_game_over():
-            loser = self.controller.get_loser()
-            if loser == self.config.human_player:
-                msg = 'YOU LOST! 😢'
+        if self._controller.is_game_over():
+            loser = self._controller.get_loser()
+            if loser == self._config.human_player:
+                msg = 'YOU LOST!'
                 color = RED
             else:
-                msg = f'Player {loser} lost! YOU WIN! 🎉'
+                msg = f'Player {loser} lost! YOU WIN!'
                 color = YELLOW
 
-            text = self.font.render(msg, True, color)
-            text_rect = text.get_rect(center=(self.config.window_width // 2, 20))
-            self.screen.blit(text, text_rect)
+            text = self._font.render(msg, True, color)
+            text_rect = text.get_rect(center=(self._config.window_width // 2, STATUS_TEXT_Y))
+            self._screen.blit(text, text_rect)
         else:
-            current = self.controller.get_current_player()
-            if current == self.config.human_player:
+            current = self._controller.get_current_player()
+            if current == self._config.human_player:
                 msg = 'Your turn'
                 color = YELLOW
             else:
                 msg = f"Player {current}'s turn"
                 color = WHITE
 
-            text = self.font.render(msg, True, color)
-            self.screen.blit(text, (10, 10))
+            text = self._font.render(msg, True, color)
+            self._screen.blit(text, (UI_MARGIN, UI_MARGIN))
 
     def _draw_message(self) -> None:
         """Draw the temporary status message if still visible."""
-        if self.message and time.time() - self.message_time < 2.0:
-            text = self.small_font.render(self.message, True, WHITE)
-            text_rect = text.get_rect(center=(self.config.window_width // 2, self.config.window_height // 2 + 130))
-            self.screen.blit(text, text_rect)
+        if self._message and time.time() - self._message_time < MESSAGE_DURATION_SECONDS:
+            text = self._small_font.render(self._message, True, WHITE)
+            text_rect = text.get_rect(center=(self._config.window_width // 2, self._config.window_height // 2 + MESSAGE_OFFSET_Y))
+            self._screen.blit(text, text_rect)
 
 
 def parse_args() -> argparse.Namespace:

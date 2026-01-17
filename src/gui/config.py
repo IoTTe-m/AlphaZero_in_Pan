@@ -27,7 +27,7 @@ class PlayConfig(BaseModel):
     num_simulations: int = 64
     num_worlds: int = 4
     c_puct_value: float = 1.0
-    policy_temp: float = 0.0  # Greedy play for AI
+    policy_temp: float = 0.0
 
     player_count: int = 4
     human_player: int = 0
