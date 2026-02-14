@@ -6,6 +6,74 @@
 <img width="1184" height="786" alt="other_gui" src="https://github.com/user-attachments/assets/ad119232-4973-43ee-af9f-ee70a949bc6a" />
 
 
+## Getting Started
+
+### Prerequisites
+
+- Python ≥ 3.12
+- [uv](https://github.com/astral-sh/uv) package manager
+- [just](https://github.com/casey/just) command runner
+
+### Installation
+
+```bash
+just install
+```
+
+To install the ML dependencies (JAX, Flax, Optax) for training:
+
+```bash
+uv sync --group ml
+```
+
+### Play Against the AI
+
+```bash
+just play
+```
+
+### Train from Scratch
+
+```bash
+just train
+```
+
+
+## Configuration
+
+All parameters are configurable through YAML files in `configs/`.
+
+### Training (`configs/default.yaml`)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `learning_rate` | `1e-4` | Optimizer learning rate |
+| `batch_size` | `32` | Training batch size |
+| `epochs` | `100` | Number of training epochs |
+| `num_simulations` | `128` | MCTS simulations per move |
+| `num_worlds` | `8` | Parallel determinized worlds |
+| `player_count` | `4` | Number of players |
+| `max_buffer_size` | `1024` | Replay buffer capacity |
+
+### Play (`configs/play.yaml`)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `num_simulations` | `64` | MCTS simulations per move |
+| `num_worlds` | `4` | Parallel determinized worlds |
+| `policy_temp` | `0.0` | Greedy play for AI |
+| `player_count` | `4` | Number of players |
+| `human_player` | `0` | Human player index |
+
+Custom configs can be passed via:
+
+```bash
+just train configs/my_custom.yaml
+just play configs/my_custom.yaml
+```
+
+
+
 ## What is Pan?
 
 **A Polish Card Game:**
@@ -130,118 +198,3 @@ graph TD
 | **Game Engine** | NumPy |
 | **Tooling** | uv · just · ruff · pyright · WandB |
 
----
-
-## Technical Achievements
-
-### Modern Python (3.12)
-
-- Type hints throughout the codebase
-- New `type` alias syntax
-- Dataclasses for clean state management
-
-### Configuration
-
-- **Pydantic** for validation
-- **YAML** config files
-- No magic constants in code
-
-### Developer Experience
-
-- `uv` — fast package management
-- `just` — task runner
-- `ruff` — linting & formatting
-- `pyright` — static type checking
-
-### Quality Assurance
-
-- GitHub Actions CI/CD
-- Pytest for unit tests
-- WandB for experiment tracking
-
-### Game Interface
-
-- Full graphical interface with **Pygame**
-- Click to play cards from your hand
-- AI opponents think in real-time
-- Visual feedback for legal moves
-- Card highlighting for valid actions
-- Multi-card selection (four-of-a-kind)
-- Turn indicators and game status
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python ≥ 3.12
-- [uv](https://github.com/astral-sh/uv) package manager
-- [just](https://github.com/casey/just) command runner
-
-### Installation
-
-```bash
-just install
-```
-
-To install the ML dependencies (JAX, Flax, Optax) for training:
-
-```bash
-uv sync --group ml
-```
-
-### Play Against the AI
-
-```bash
-just play
-```
-
-### Train from Scratch
-
-```bash
-just train
-```
-
-
-## Configuration
-
-All parameters are configurable through YAML files in `configs/`.
-
-### Training (`configs/default.yaml`)
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `learning_rate` | `1e-4` | Optimizer learning rate |
-| `batch_size` | `32` | Training batch size |
-| `epochs` | `100` | Number of training epochs |
-| `num_simulations` | `128` | MCTS simulations per move |
-| `num_worlds` | `8` | Parallel determinized worlds |
-| `player_count` | `4` | Number of players |
-| `max_buffer_size` | `1024` | Replay buffer capacity |
-
-### Play (`configs/play.yaml`)
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `num_simulations` | `64` | MCTS simulations per move |
-| `num_worlds` | `4` | Parallel determinized worlds |
-| `policy_temp` | `0.0` | Greedy play for AI |
-| `player_count` | `4` | Number of players |
-| `human_player` | `0` | Human player index |
-
-Custom configs can be passed via:
-
-```bash
-just train configs/my_custom.yaml
-just play configs/my_custom.yaml
-```
-
----
-
-## Configurability & Extensibility
-
-- **Modular design** — swap components easily
-- **WandB integration** for experiment comparison
-- **Checkpoint saving/loading** for long training runs
-- **Framework prepared** for distributed training
