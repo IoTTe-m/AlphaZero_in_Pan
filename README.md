@@ -1,7 +1,7 @@
 # AlphaZero in the Game of Pan
 
 
-**AlphaZero** made history by defeating world champions at Chess and Go, learning entirely through **self-play** with no human expert knowledge required. This project applies the same approach to **Pan** — a Polish card game with hidden information.
+**AlphaZero** made history by defeating world champions at Chess and Go, learning entirely through **self-play** with no human expert knowledge required. This project applies the same approach to **Pan** - a Polish card game with hidden information.
 
 <img width="1184" height="786" alt="other_gui" src="https://github.com/user-attachments/assets/ad119232-4973-43ee-af9f-ee70a949bc6a" />
 
