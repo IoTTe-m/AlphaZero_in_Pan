@@ -72,6 +72,15 @@ just train configs/my_custom.yaml
 just play configs/my_custom.yaml
 ```
 
+### Tech Stack
+
+| Layer | Technologies |
+|-------|-------------|
+| **GUI** | Pygame |
+| **ML** | MCTS + Neural Networks |
+| **Framework** | JAX / Flax / Optax |
+| **Game Engine** | NumPy |
+| **Tooling** | uv · just · ruff · pyright · WandB |
 
 
 ## What is Pan?
@@ -88,9 +97,7 @@ just play configs/my_custom.yaml
 - If you can't or don't want to play, take up to 3 cards
 - If you have 4 cards of the same rank, you can play them at once
 
-> *You only see your own cards!*
-
-### The Spade Twist
+> *You only see your own cards!*  
 
 Playing a **♠ Spade** **reverses** the turn order!
 
@@ -105,20 +112,17 @@ Playing a **♠ Spade** **reverses** the turn order!
 
 ---
 
-## Our Solution
+## The AlphaZero Approach
 
-### The AlphaZero Approach
 
-**No Human Teachers:**
+- **No Human Teachers:**
+    - Starts knowing only the rules
+    - Plays millions of games against itself
+    - Learns what works through trial and error
 
-- Starts knowing only the rules
-- Plays millions of games against itself
-- Learns what works through trial and error
-
-**Two Neural Networks:**
-
-- **Policy Network:** *"What should I play?"*
-- **Value Network:** *"Who's winning?"*
+- **Two Neural Networks:**
+    - **Policy Network:** *"What should I play?"*
+    - **Value Network:** *"Who's winning?"*
 
 ### Adapting to Imperfect Information
 
@@ -188,13 +192,4 @@ graph TD
     TR -- update --> NN
 ```
 
-### Tech Stack
-
-| Layer | Technologies |
-|-------|-------------|
-| **GUI** | Pygame |
-| **ML** | MCTS + Neural Networks |
-| **Framework** | JAX / Flax / Optax |
-| **Game Engine** | NumPy |
-| **Tooling** | uv · just · ruff · pyright · WandB |
 
