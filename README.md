@@ -1,13 +1,9 @@
 # AlphaZero in the Game of Pan
 
-> *What if we could teach an AI to play a Polish card game — from scratch?*
 
 **AlphaZero** made history by defeating world champions at Chess and Go, learning entirely through **self-play** with no human expert knowledge required. This project applies the same approach to **Pan** — a Polish card game with hidden information.
 
-```mermaid
-graph TD
-    A["🧠 AlphaZero<br/><i>Chess, Go, Shogi</i>"] -- Adapt --> B["🃏 Pan<br/><i>Hidden cards, 2–4 players</i>"]
-```
+<img width="1184" height="786" alt="other_gui" src="https://github.com/user-attachments/assets/ad119232-4973-43ee-af9f-ee70a949bc6a" />
 
 
 ## What is Pan?
@@ -39,41 +35,11 @@ Playing a **♠ Spade** **reverses** the turn order!
 
 *The AI must learn to exploit this.*
 
-```mermaid
-graph LR
-    subgraph Normal Order
-        direction LR
-        P0_n(You) -- "→" --> P1_n(P1)
-        P1_n -- "→" --> P2_n(P2)
-        P2_n -- "→" --> P3_n(P3)
-        P3_n -- "→" --> P0_n
-    end
-```
-
-```mermaid
-graph RL
-    subgraph Reversed Order – after ♠
-        direction RL
-        P0_r(You) -. "←" .-> P3_r(P3)
-        P3_r -. "←" .-> P2_r(P2)
-        P2_r -. "←" .-> P1_r(P1)
-        P1_r -. "←" .-> P0_r
-    end
-```
-
 ---
 
 ## Our Solution
 
 ### The AlphaZero Approach
-
-```mermaid
-graph LR
-    A["🎮 Self-Play<br/>Games"] --> B["📊 Training<br/>Data"]
-    B --> C["🧠 Train Neural<br/>Networks"]
-    C --> D["✅ Better<br/>Decisions"]
-    D --> A
-```
 
 **No Human Teachers:**
 
@@ -155,24 +121,6 @@ graph TD
 ```
 
 ### Tech Stack
-
-```mermaid
-block-beta
-    columns 1
-    block:stack
-        GUI["Pygame GUI"]
-        ML["MCTS + Neural Networks"]
-        JAX["JAX / Flax / Optax"]
-        Engine["Game Engine (NumPy)"]
-        Tools["uv · just · ruff · WandB"]
-    end
-
-    style GUI fill:#aaffaa
-    style ML fill:#aaaaff
-    style JAX fill:#ddaaff
-    style Engine fill:#ffcc99
-    style Tools fill:#cccccc
-```
 
 | Layer | Technologies |
 |-------|-------------|
